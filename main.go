@@ -439,6 +439,7 @@ func NextChallenge(w http.ResponseWriter, r *http.Request){
 	for _, found  := range s.Progress {
 		if !found && s.Attempts<MAXATTEMPTS{
 			http.Error(w, "Complete the previous Challenge",http.StatusExpectationFailed)
+			return
 		}	
 	}
 	games.SaveSession(s.ID)
