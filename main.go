@@ -114,16 +114,10 @@ func (g *SessionManager) SaveSession(SessionID string) error {
 		return errors.New("session not found")
 	}
 
-	db, err := sql.Open("sqlite3", "game_sessions.db")
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
 	query := `INSERT INTO sessions (id, snapshot_id, challenge, progress, content, attempts, last_accessed) 
 	          VALUES (?, ?, ?, ?, ?, ?, ?)`
 
-	_, err = db.Exec(query, 
+	_, err := db.Exec(query, 
 		SessionID, 
 		uuid.NewString(), // Unique snapshot ID
 		s.challenge, 
@@ -146,7 +140,7 @@ func (g *SessionManager) ServeNextChallenge(SessionID string)error{
 	g.RLock()
 	n := g.sessions[SessionID].challenge
 	if n+1 >= g.MaxDaily{
-		return errors.New("Reached Daily Limit")
+		return errors.New("reached daily limit")
 	}
 	g.CreateSession(SessionID,n+1)
 
@@ -196,10 +190,7 @@ type Session struct {
 
 func (s *Session) isValid() bool {
 	c:= games.GetChallenge(s.challenge)
-	if c.len == len(s.Progress) {
-		return true
-	}
-	return false
+	return c.len == len(s.Progress)
 }
 
 func (s *Session) GetPayload() ([]byte, error) {
@@ -225,7 +216,7 @@ func (s *Session) updateSession(content string) {
 	
 	for _, word := range words {
         for index, qouteword := range Challenge.Words {
-            if s.Progress[index] == false && strings.Contains(word, qouteword) {
+            if !s.Progress[index] && strings.Contains(word, qouteword) {
                     s.Progress[index] = true
             }
         }
@@ -447,6 +438,10 @@ func NextChallenge(w http.ResponseWriter, r *http.Request){
 			return
 		}	
 	}
+	err := games.SaveSession(s.ID)
+	if err != nil {
+		fmt.Println(err)	
+	}
 	games.SaveSession(s.ID)
 	games.ServeNextChallenge(s.ID)
 	w.WriteHeader(http.StatusOK)
@@ -497,7 +492,7 @@ func placeholderChallenges() []*Challenge{
 		quote  string
 		author string
 	}{
-		{"Stay is the and hungry, stay foolish.", "Steve Jobs"},
+		{"is the and", "Steve Jobs"},
 		{"Do what you can, with what you have, where you are.", "Theodore Roosevelt"},
 		{"In the middle of difficulty lies opportunity.", "Albert Einstein"},
 		{"The only way to do great work is to love what you do.", "Steve Jobs"},
@@ -525,7 +520,8 @@ var db *sql.DB
 
 func initDB() (*sql.DB, error) {
 	// Open the database (it will be created if it doesn't exist)
-	db, err := sql.Open("sqlite3", "game_sessions.db")
+	var err error
+	db, err = sql.Open("sqlite3", "game_sessions.db")
 	if err != nil {
 		return nil, err
 	}

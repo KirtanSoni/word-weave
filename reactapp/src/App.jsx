@@ -111,6 +111,20 @@ export default function App() {
     });
   }
 
+  const handleNext = async () => {
+    try {
+      const response = await fetch('/game/next', {
+        method: 'GET',
+        credentials: 'include'
+      })
+      if (!response.ok) {
+        console.log("NOOOO")
+      }
+    } catch (e) {
+      console.log(err)
+    }
+  }
+
   const handleSelectionSubmit = async () => {
    
     try {
@@ -251,6 +265,12 @@ export default function App() {
         className='bg-blue-500 text-white p-2 rounded'
       >
         Submit Selection
+      </button>
+      <button
+        onClick={handleNext}
+        className='bg-green-500 text-white p-2 rounded'
+      >
+        Next
       </button>
     </div>
   </div>
