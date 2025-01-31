@@ -14,8 +14,9 @@ import (
 	"time"
 	"unicode"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/gohugoio/hugo-goldmark-extensions/passthrough"
 	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/openai/openai-go"
 )
 
@@ -138,14 +139,14 @@ func toJSON(v interface{}) string {
 
 func (g *SessionManager) ServeNextChallenge(SessionID string)error{
 	g.RLock()
-	n := g.sessions[SessionID].challenge
+	s:= g.sessions[SessionID]
+	n:= s.challenge
+	g.RUnlock()
 	if n+1 >= g.MaxDaily{
 		return errors.New("reached daily limit")
 	}
 	g.CreateSession(SessionID,n+1)
 
-	
-	defer g.RUnlock()
 	return nil
 }
 
@@ -160,20 +161,18 @@ func (g *SessionManager) CreateSession(SessionID string, challenge int){
 	c :=	g.GetChallenge(challenge)
 	g.Lock()
 	defer g.Unlock()
-	s, ok:= g.sessions[SessionID]
-	if !ok || !s.isValid(){
-		s:= &Session{
-			ID: SessionID,
-			challenge: challenge,
-			Progress: make([]bool,c.len),
-			Content: make([]string,MAXATTEMPTS+1),
-			Attempts: 0,
-			isActive: false,
-			LastAccessed: time.Now(),
-		}
-		s.Content = append(s.Content, c.Content)
-		g.sessions[SessionID] = s
+	s:= &Session{
+		ID: SessionID,
+		challenge: challenge,
+		Progress: make([]bool,c.len),
+		Content: make([]string,MAXATTEMPTS+1),
+		Attempts: 0,
+		isActive: false,
+		LastAccessed: time.Now(),
 	}
+	s.Content = append(s.Content, c.Content)
+	g.sessions[SessionID] = s
+	
 }
 
 type Session struct {
@@ -198,6 +197,7 @@ func (s *Session) GetPayload() ([]byte, error) {
 	Challenge := games.GetChallenge(s.challenge)
 	// Return Payload
 	return json.Marshal(ResponseStructure{
+		Challenge: s.challenge+1,
 		Content:  s.Content[len(s.Content)-1],
 		Length:   Challenge.len,
 		Quote:    Challenge.Quote,
@@ -242,6 +242,7 @@ type Challenge struct {
 }
 
 type ResponseStructure struct {
+	Challenge int `json:"challenge"`
 	Quote    string `json:"quote"`
 	Author   string `json:"author"`
 	Length   int    `json:"length"`
@@ -273,7 +274,6 @@ func (g *SessionManager) findSession(r *http.Request) (*Session, bool){
 	Session, exists:= games.sessions[SessionID]
 	games.RUnlock()
 
-	fmt.Println(SessionID, " : ", Session," :",exists)
 	if ! Session.isValid(){
 		fmt.Println("session invalid")
 		return nil, exists
@@ -337,18 +337,18 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 			return
 		}
-        
-		chunks := make(chan string, 10)
-		var content string
-        if !s.Validate(content){
+        if input.Input == ""{
+			w.WriteHeader(http.StatusExpectationFailed)
+            return
+		}
+		
+        if !s.Validate(input.Input){
             http.Error(w, "Invalid Input", http.StatusExpectationFailed)
             return 
         }
 
-		if input.Input == ""{
-			http.Error(w, "Empty Input", http.StatusExpectationFailed)
-            return
-		}
+		chunks := make(chan string, 10)
+		var content string
 		go func() {
 			content = StreamingLLM(input.Input, r.Context(), chunks)
 		}()
@@ -391,6 +391,10 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 		}),
 		Seed:  openai.Int(0),
 		Model: openai.F(openai.ChatModelGPT4o),
+		MaxTokens: openai.Int(150), 
+
+		// feat: 
+		// Temperature: param.Field[float64]{},
 	})
 
 	acc := openai.ChatCompletionAccumulator{}
@@ -399,12 +403,12 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 		chunk := stream.Current()
 		acc.AddChunk(chunk)
 
-		if content, ok := acc.JustFinishedContent(); ok {
-			println("Content stream finished:", content)
+		if _, ok := acc.JustFinishedContent(); ok {
+			;// println("Content stream finished:", content)
 		}
 
-		if refusal, ok := acc.JustFinishedRefusal(); ok {
-			println("Refusal stream finished:", refusal)
+		if _, ok := acc.JustFinishedRefusal(); ok {
+			;// println("Refusal stream finished:", refusal)
 		}
 
 		if len(chunk.Choices) > 0 {
@@ -443,7 +447,11 @@ func NextChallenge(w http.ResponseWriter, r *http.Request){
 		fmt.Println(err)	
 	}
 	games.SaveSession(s.ID)
-	games.ServeNextChallenge(s.ID)
+	err = games.ServeNextChallenge(s.ID)
+	if err != nil {
+ 		fmt.Println(err)
+ 		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
