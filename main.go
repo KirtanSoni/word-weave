@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -13,111 +14,46 @@ import (
 	"time"
 	"unicode"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/google/uuid"
 	"github.com/openai/openai-go"
 )
 
 var (
 	addr      = flag.String("addr", ":8080", "Port of the server")
-	Quote   = "Simplicity is the ultimate sophistication."
-	Author  = "Leonardo da Vinci"
-	Content = "this starting point shall lead you to W"
-
-	Todays = &Challenge{
-		Quote:   Quote,
-		Author:  Author,
-		Content: Content,
-		len:     len(strings.Split(Quote, " ")),
-		Words:   sanitizeText(Quote),
-	}
+	MAXDAILYGAMES = 5
+	MAXATTEMPTS = 50
 )
 
-// removes punctuations and returns array of words
-func sanitizeText(text string) []string {
-    text = strings.ToLower(text)
-    var clean strings.Builder
-    for _, r := range text {
-        if unicode.IsLetter(r) || unicode.IsSpace(r) {
-            clean.WriteRune(r)
-        }
-    }
-    words := strings.Fields(clean.String())
-    return words
+
+
+// Sessions ------
+
+// Manages Game Sessions 
+type SessionManager struct{
+	sessions map[string]*Session 
+	MaxDaily int
+
+	//cannot be nil all values need to be filled ( len = MaxDaily)
+	Challenges []*Challenge
+	sync.RWMutex
 }
 
-type Challenge struct {
-	Quote   string
-	Author  string
-	Content string
-	Words   []string
-	len     int
+var games = &SessionManager{
+	sessions: make(map[string]*Session),
+	MaxDaily: MAXDAILYGAMES,
+	Challenges: make([]*Challenge,MAXDAILYGAMES),
 }
 
-func getTodaysChallenge() Challenge {
-	return *Todays
-}
-
-type ResponseStructure struct {
-	Quote    string `json:"quote,omitempty"`
-	Author   string `json:"author,omitempty"`
-	Length   int    `json:"length,omitempty"`
-	Content  string `json:"content"`
-	Attempts int    `json:"attempts,omitempty"`
-	Progress []bool `json:"progress,omitempty"`
-	Done     bool   `json:"done"`
-}
-
-type ReqStructure struct {
-	Input string `json:"input"`
-}
-
-var (
-	sessions map[string]*Session = map[string]*Session{}
-	s_mu     sync.RWMutex
-)
-
-type Session struct {
-	Challenge    *Challenge
-	Progress     map[string]*bool
-	Content      []string
-	LastAccessed time.Time
-    isActive bool
-}
-
-func (s *Session) isValid(c *Challenge) bool {
-	if s.Challenge != c {
-		return false
-	} else {
-		return true
-	}
-}
-
-func (s *Session) getProgress() ([]bool, error) {
-
-	Words := s.Challenge.Words
-	n := s.Challenge.len
-	if n != len(s.Progress) {
-		return nil, errors.New("Qoute is not Valid for the Session")
-	}
-
-	res := make([]bool, n)
-	for i := 0; i < n; i++ {
-		res[i] = *s.Progress[Words[i]]
-	}
-
-	return res, nil
-}
-
-func GetSetSession(w http.ResponseWriter, r *http.Request) *Session {
-
+func (g *SessionManager) ManageSession(w http.ResponseWriter, r *http.Request) *Session {
 	var sessionID string
 
 	cookie, err := r.Cookie("session")
 
 	//if no cookie, set cookie
-	if err != nil || cookie.Value == "" {
+	if err != nil || cookie ==nil ||cookie.Value == "" {
 		sessionID = uuid.NewString()
-		cookie := &http.Cookie{
+		cookie = &http.Cookie{
 			Name:     "session",
 			Value:    sessionID,
 			SameSite: http.SameSiteLaxMode,
@@ -130,78 +66,232 @@ func GetSetSession(w http.ResponseWriter, r *http.Request) *Session {
 	}
 
 	sessionID = cookie.Value
+	
 	if sessionID == "" {
 		panic("Assert Error: Session ID cannot be nil")
 	}
 
-	// Get Session
-	s_mu.RLock()
-	s, exists := sessions[sessionID]
-	s_mu.RUnlock()
+	games.RLock()
+	s, exists:= games.sessions[sessionID]
+	games.RUnlock()
 
 	//Set Session
-	if !exists || !s.isValid(Todays) {
-
-		history := make([]string, 1)
-		history[0] = Todays.Content
-		s = &Session{
-            isActive: false,
-			Content:      history,
-			LastAccessed: time.Now(),
-			Challenge:    Todays,
-		}
-		progress := make(map[string]*bool)
-
-		for _, val := range s.Challenge.Words {
-			progress[val] = new(bool)
-		}
-		s.Progress = progress
-
-		s_mu.Lock()
-		sessions[sessionID] = s
-		s_mu.Unlock()
+	if !exists|| s==nil  {
+		// appoint challenge 1 
+		games.CreateSession(sessionID,0)
 	}
+	games.RLock()
+	s = games.sessions[sessionID]
+	games.RUnlock()
 
 	if s == nil {
 		panic("Assert Error: session cannot be nil")
 	}
 	return s
 }
+ 
+func (g *SessionManager) HealthCheck(){
+	if g.Challenges == nil {
+		panic("Challenges not Initialized")
+	}
+}
 
-func (s *Session) GetPayload() ([]byte, error) {
-	progress, err := s.getProgress()
-	if err != nil {
-		panic("Session is not for Todays Qoute.")
+func (g *SessionManager) PopulateChallenges(Challenges []* Challenge) {
+	if len(Challenges) != g.MaxDaily{
+		panic("PopulateChallenges: > MaxDaily ")
+	}
+	g.RWMutex.Lock()
+	g.Challenges = Challenges
+	g.RWMutex.Unlock()
+}
+
+func (g *SessionManager) SaveSession(SessionID string) error {
+	g.RLock()
+	s, exists := g.sessions[SessionID]
+	g.RUnlock()
+
+	if !exists || s == nil {
+		return errors.New("session not found")
 	}
 
+	db, err := sql.Open("sqlite3", "game_sessions.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	query := `INSERT INTO sessions (id, snapshot_id, challenge, progress, content, attempts, last_accessed) 
+	          VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	_, err = db.Exec(query, 
+		SessionID, 
+		uuid.NewString(), // Unique snapshot ID
+		s.challenge, 
+		toJSON(s.Progress), 
+		toJSON(s.Content), 
+		s.Attempts, 
+		time.Now(),
+	)
+
+	return err
+}
+
+// Helper to convert slices to JSON
+func toJSON(v interface{}) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+func (g *SessionManager) ServeNextChallenge(SessionID string)error{
+	g.RLock()
+	n := g.sessions[SessionID].challenge
+	if n+1 >= g.MaxDaily{
+		return errors.New("Reached Daily Limit")
+	}
+	g.CreateSession(SessionID,n+1)
+
+	
+	defer g.RUnlock()
+	return nil
+}
+
+func (g *SessionManager) GetChallenge(Index int) *Challenge{
+	if Index>=g.MaxDaily{
+		panic("Challenge Index OutofBound")
+	}
+	return g.Challenges[Index]
+}
+
+func (g *SessionManager) CreateSession(SessionID string, challenge int){
+	c :=	g.GetChallenge(challenge)
+	g.Lock()
+	defer g.Unlock()
+	s, ok:= g.sessions[SessionID]
+	if !ok || !s.isValid(){
+		s:= &Session{
+			ID: SessionID,
+			challenge: challenge,
+			Progress: make([]bool,c.len),
+			Content: make([]string,MAXATTEMPTS+1),
+			Attempts: 0,
+			isActive: false,
+			LastAccessed: time.Now(),
+		}
+		s.Content = append(s.Content, c.Content)
+		g.sessions[SessionID] = s
+	}
+}
+
+type Session struct {
+	ID string
+	challenge int
+	Progress []bool
+	Content  []string
+	Attempts int
+    isActive bool
+
+	// LLM limiting, wait for 5 seconds
+	LastAccessed time.Time
+}
+
+func (s *Session) isValid() bool {
+	c:= games.GetChallenge(s.challenge)
+	if c.len == len(s.Progress) {
+		return true
+	}
+	return false
+}
+
+func (s *Session) GetPayload() ([]byte, error) {
+
+	Challenge := games.GetChallenge(s.challenge)
 	// Return Payload
 	return json.Marshal(ResponseStructure{
 		Content:  s.Content[len(s.Content)-1],
-		Length:   s.Challenge.len,
-		Quote:    s.Challenge.Quote,
-		Author:   s.Challenge.Author,
-		Attempts: len(s.Content) - 1,
-		Progress: progress,
-		Done:     true,
+		Length:   Challenge.len,
+		Quote:    Challenge.Quote,
+		Author:   Challenge.Author,
+		Attempts: s.Attempts,
+		Progress: s.Progress,
 	})
 
 }
 
 func (s *Session) updateSession(content string) {
-	s.Content = append(s.Content, content)
-	content_words := sanitizeText(content)
-	for _, ContentWord := range content_words {
-        for quoteWord, completed := range s.Progress {
-            if completed != nil && *completed == false {
-                if strings.Contains(ContentWord, quoteWord) {
-                    True := true
-                    s.Progress[quoteWord] = &True
-                }
+	s.AddContent(content)
+	words := sanitizeText(content)
+	
+	Challenge := games.GetChallenge(s.challenge)
+	
+	for _, word := range words {
+        for index, qouteword := range Challenge.Words {
+            if s.Progress[index] == false && strings.Contains(word, qouteword) {
+                    s.Progress[index] = true
             }
         }
     }
 }
 
+
+
+func (s *Session) AddContent(content string){
+	if s.Attempts >= MAXATTEMPTS{
+		panic("MAX Attempts Reached")
+	}
+	s.Attempts++
+	s.Content = append(s.Content, content)
+}
+
+type Challenge struct {
+	Quote   string
+	Author  string
+	Content string
+	Words   []string
+	len     int
+}
+
+type ResponseStructure struct {
+	Quote    string `json:"quote"`
+	Author   string `json:"author"`
+	Length   int    `json:"length"`
+	Content  string `json:"content"`
+	Attempts int    `json:"attempts"`
+	Progress []bool `json:"progress"`
+}
+
+type ReqStructure struct {
+	Input string `json:"input"`
+}
+
+
+
+
+
+
+// Endpoints------ 
+
+func (g *SessionManager) findSession(r *http.Request) (*Session, bool){
+	cookie, err := r.Cookie("session")	
+	SessionID := cookie.Value
+	//if no cookie, set cookie
+	if err != nil || SessionID == "" {
+		return nil, false
+	}
+
+	games.RLock()
+	Session, exists:= games.sessions[SessionID]
+	games.RUnlock()
+
+	fmt.Println(SessionID, " : ", Session," :",exists)
+	if ! Session.isValid(){
+		fmt.Println("session invalid")
+		return nil, exists
+	}
+	return Session, exists
+
+}
+
+// game endpoint
 func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
 	
     if r.Method == "OPTIONS" {
@@ -211,10 +301,7 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	
     if r.Method == "GET" {
-		// Should always return a valid Session
-		s := GetSetSession(w, r)
-
-		// Returns All Information About The GameState
+		s:= games.ManageSession(w,r)
 		payload, err := s.GetPayload()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -226,15 +313,13 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
 	// Post EndPoint Streaming
 	if r.Method == "POST" {
         w.Header().Set("Transfer-Encoding", "chunked")
-		cookie, err := r.Cookie("session")
-		if err != nil {
+
+
+		s, exists := games.findSession(r)
+		if !exists || s==nil {
 			http.Error(w, "No Session Found", http.StatusUnauthorized)
 			return
 		}
-
-		s_mu.RLock()
-		s, exists := sessions[cookie.Value]
-		s_mu.RUnlock()
 
         if s.isActive{
             http.Error(w, "Too many Requests", http.StatusRequestTimeout)
@@ -243,7 +328,7 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
         s.isActive = true
         defer func(){ s.isActive = false }()
 
-		if !exists || !s.isValid(Todays) {
+		if !exists || !s.isValid() {
 			http.Error(w, "Invalid Session", http.StatusUnauthorized)
 			return
 		}
@@ -268,7 +353,6 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
             http.Error(w, "Invalid Input", http.StatusExpectationFailed)
             return 
         }
-
 		go func() {
 			content = StreamingLLM(input.Input, r.Context(), chunks)
 		}()
@@ -339,12 +423,181 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 	return acc.Choices[0].Message.Content
 }
 
+
+func NextChallenge(w http.ResponseWriter, r *http.Request){
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	s, exists := games.findSession(r)
+	if !exists || s==nil {
+		http.Error(w, "No Session Found", http.StatusUnauthorized)
+		return
+	}
+
+
+	for _, found  := range s.Progress {
+		if !found && s.Attempts<MAXATTEMPTS{
+			http.Error(w, "Complete the previous Challenge",http.StatusExpectationFailed)
+		}	
+	}
+	games.SaveSession(s.ID)
+	games.ServeNextChallenge(s.ID)
+	w.WriteHeader(http.StatusOK)
+}
+
+
 func main() {
+
+	db, err := initDB()
+	if err != nil {
+		fmt.Println("Error initializing database:", err)
+		return
+	}
+	defer db.Close()
 	flag.Parse()
+
+	games.PopulateChallenges(placeholderChallenges())
+	games.HealthCheck()
+
+	go scheduleDailyTask()
+
 	http.HandleFunc("/game", GenerateNewContent)
+	http.HandleFunc("/game/next",NextChallenge)
 	http.HandleFunc("/", GetReactSPA().ServeHTTP)
 	fmt.Println("Starting Server on port " + *addr)
 	http.ListenAndServe(*addr, nil)
 }
 
 
+
+// Helpers -------
+
+// removes punctuations and returns array of words
+func sanitizeText(text string) []string {
+    text = strings.ToLower(text)
+    var clean strings.Builder
+    for _, r := range text {
+        if unicode.IsLetter(r) || unicode.IsSpace(r) {
+            clean.WriteRune(r)
+        }
+    }
+    words := strings.Fields(clean.String())
+    return words
+}
+
+func placeholderChallenges() []*Challenge{
+	quotes := []struct {
+		quote  string
+		author string
+	}{
+		{"Stay is the and hungry, stay foolish.", "Steve Jobs"},
+		{"Do what you can, with what you have, where you are.", "Theodore Roosevelt"},
+		{"In the middle of difficulty lies opportunity.", "Albert Einstein"},
+		{"The only way to do great work is to love what you do.", "Steve Jobs"},
+		{"It always seems impossible until it's done.", "Nelson Mandela"},
+	}
+
+	challenges := make([]*Challenge, len(quotes))
+
+	for i, q := range quotes {
+		content := fmt.Sprintf("This is a randomly generated paragraph for challenge %d.", i+1)
+		words := sanitizeText(q.quote)
+		challenges[i] = &Challenge{
+			Quote:   q.quote,
+			Author:  q.author,
+			Content: content,
+			Words:   words,
+			len:     len(words),
+		}
+	}
+
+	return challenges
+}
+
+var db *sql.DB
+
+func initDB() (*sql.DB, error) {
+	// Open the database (it will be created if it doesn't exist)
+	db, err := sql.Open("sqlite3", "game_sessions.db")
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the table if it doesn't exist
+	query := `CREATE TABLE IF NOT EXISTS sessions (
+		id TEXT NOT NULL,            -- Session ID (not unique, so multiple snapshots can exist)
+		snapshot_id TEXT PRIMARY KEY, -- Unique snapshot identifier
+		challenge INTEGER NOT NULL,
+		progress TEXT NOT NULL,      -- Store as JSON string
+		content TEXT NOT NULL,       -- Store as JSON string
+		attempts INTEGER NOT NULL,
+		last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	_, err = db.Exec(query)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+
+// scheduleDailyTask schedules the task to run every day at midnight.
+func scheduleDailyTask() {
+
+	// Calculate the duration until midnight.
+	now := time.Now()
+	nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	durationUntilMidnight := time.Until(nextMidnight)
+
+
+	time.Sleep(durationUntilMidnight)
+	MidNightUpdate()
+
+	// After running once, set up the ticker to run every 24 hours.
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	// Keep running the task every 24 hours.
+	for range ticker.C {
+		MidNightUpdate()
+	}
+}
+
+func MidNightUpdate() {
+	fmt.Println("Running scheduled task at midnight")
+
+	saveAllSessions()
+
+	clearAllSessions()
+
+	newChallenges := APIChallenges(MAXDAILYGAMES) // Fetch 10 new challenges
+	games.PopulateChallenges(newChallenges)
+}
+
+func saveAllSessions() {
+	for sessionID, _ := range games.sessions {
+		err := games.SaveSession(sessionID)
+		if err != nil {
+			fmt.Printf("Failed to save session %s: %v\n", sessionID, err)
+		} else {
+			fmt.Printf("Session %s saved successfully\n", sessionID)
+		}
+	}
+}
+
+func clearAllSessions() {
+	games.Lock()
+	defer games.Unlock()
+	games.sessions = make(map[string]*Session)
+	fmt.Println("Game sessions cleared")
+}
+
+// Simulated API call to fetch new challenges
+func APIChallenges(s int) []*Challenge {
+	// Here you would implement the actual API call logic to fetch challenges.
+	// For now, we will simulate by returning placeholder challenges.
+	return placeholderChallenges() // Reusing the placeholder function.
+}
