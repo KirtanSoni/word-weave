@@ -353,6 +353,11 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
             http.Error(w, "Invalid Input", http.StatusExpectationFailed)
             return 
         }
+
+		if input.Input == ""{
+			http.Error(w, "Empty Input", http.StatusExpectationFailed)
+            return
+		}
 		go func() {
 			content = StreamingLLM(input.Input, r.Context(), chunks)
 		}()
