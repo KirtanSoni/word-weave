@@ -14,7 +14,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/gohugoio/hugo-goldmark-extensions/passthrough"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openai/openai-go"
