@@ -14,7 +14,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/gohugoio/hugo-goldmark-extensions/passthrough"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openai/openai-go"
@@ -342,6 +341,11 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
             return
 		}
 		
+		if s.isComplete(){
+			w.WriteHeader(http.StatusExpectationFailed)
+			return
+		}	
+
         if !s.Validate(input.Input){
             http.Error(w, "Invalid Input", http.StatusExpectationFailed)
             return 
@@ -382,6 +386,7 @@ func (s *Session)Validate(content string) bool{
     return strings.Contains(s.Content[len(s.Content)-1],content)
 }
 
+
 func StreamingLLM(input string, ctx context.Context, output chan string) string {
 	client := openai.NewClient()
 	stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
@@ -390,7 +395,7 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 			openai.UserMessage(input),
 		}),
 		Seed:  openai.Int(0),
-		Model: openai.F(openai.ChatModelGPT4o),
+		Model: openai.F(openai.ChatModelGPT3_5Turbo),
 		MaxTokens: openai.Int(150), 
 
 		// feat: 
@@ -423,7 +428,14 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 	return acc.Choices[0].Message.Content
 }
 
-
+func (s *Session) isComplete()bool{
+	for _, found  := range s.Progress {
+		if !found && s.Attempts<MAXATTEMPTS{
+			return false
+		}	
+	}
+	return true
+}
 func NextChallenge(w http.ResponseWriter, r *http.Request){
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
@@ -435,13 +447,10 @@ func NextChallenge(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-
-	for _, found  := range s.Progress {
-		if !found && s.Attempts<MAXATTEMPTS{
-			http.Error(w, "Complete the previous Challenge",http.StatusExpectationFailed)
-			return
-		}	
-	}
+	if !s.isComplete(){
+		http.Error(w, "Complete the previous Challenge",http.StatusExpectationFailed)
+		return
+	}	
 	err := games.SaveSession(s.ID)
 	if err != nil {
 		fmt.Println(err)	
@@ -588,7 +597,7 @@ func MidNightUpdate() {
 }
 
 func saveAllSessions() {
-	for sessionID, _ := range games.sessions {
+	for sessionID := range games.sessions {
 		err := games.SaveSession(sessionID)
 		if err != nil {
 			fmt.Printf("Failed to save session %s: %v\n", sessionID, err)
