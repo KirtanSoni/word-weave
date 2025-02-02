@@ -500,6 +500,7 @@ func main() {
 	http.HandleFunc("/game", GenerateNewContent)
 	http.HandleFunc("/game/next",NextChallenge)
 	http.HandleFunc("/", GetReactSPA().ServeHTTP)
+	http.HandleFunc("/logs", handleHealth)
 	fmt.Println("Starting Server on port " + *addr)
 	http.ListenAndServe(*addr, nil)
 }
@@ -636,4 +637,62 @@ func APIChallenges(s int) []*Challenge {
 	// Here you would implement the actual API call logic to fetch challenges.
 	// For now, we will simulate by returning placeholder challenges.
 	return placeholderChallenges() // Reusing the placeholder function.
+}
+
+type LogRequest struct{
+	From string `json:"from"`
+	To string `json:"to"`
+}
+
+type  LogResponse struct{
+	TotalGames int `json:"total_games"`
+	UniqueGames int `json:"unique_games"`
+	ContentGenerated int `json:"content_generate"`
+}
+
+func GetHealth(From time.Time,To time.Time) LogResponse {
+	query:= `
+		SELECT COUNT(*) AS total_games, 
+		       COUNT(DISTINCT id) AS unique_games, 
+		       SUM(JSON_ARRAY_LENGTH(content)) AS content_generated
+		FROM sessions
+		WHERE last_accessed BETWEEN ? AND ?;`
+	var response LogResponse
+	row := db.QueryRow(query, From, To)
+	err := row.Scan(&response.TotalGames, &response.UniqueGames, &response.ContentGenerated)
+	if err != nil {
+		return LogResponse{}
+	}
+	return response
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req LogRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	from, err := time.Parse("2006-01-02", req.From)
+	if err != nil {
+		http.Error(w, "Invalid 'from' date format", http.StatusBadRequest)
+		return
+	}
+
+	to, err := time.Parse("2006-01-02", req.To)
+	if err != nil {
+		http.Error(w, "Invalid 'to' date format", http.StatusBadRequest)
+		return
+	}
+
+	response := GetHealth(from, to)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
