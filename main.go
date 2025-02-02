@@ -23,6 +23,9 @@ var (
 	addr      = flag.String("addr", ":8080", "Port of the server")
 	MAXDAILYGAMES = 5
 	MAXATTEMPTS = 50
+	MAXSESSIONS = 100 
+	INACTIVE_THRESHOLD = time.Minute * 10 
+	LLM_TIMOUT = time.Second * 5
 )
 
 
@@ -33,7 +36,6 @@ var (
 type SessionManager struct{
 	sessions map[string]*Session 
 	MaxDaily int
-
 	//cannot be nil all values need to be filled ( len = MaxDaily)
 	Challenges []*Challenge
 	sync.RWMutex
@@ -166,7 +168,6 @@ func (g *SessionManager) CreateSession(SessionID string, challenge int){
 		Progress: make([]bool,c.len),
 		Content: make([]string,MAXATTEMPTS+1),
 		Attempts: 0,
-		isActive: false,
 		LastAccessed: time.Now(),
 	}
 	s.Content = append(s.Content, c.Content)
@@ -180,7 +181,6 @@ type Session struct {
 	Progress []bool
 	Content  []string
 	Attempts int
-    isActive bool
 
 	// LLM limiting, wait for 5 seconds
 	LastAccessed time.Time
@@ -203,6 +203,7 @@ func (s *Session) GetPayload() ([]byte, error) {
 		Author:   Challenge.Author,
 		Attempts: s.Attempts,
 		Progress: s.Progress,
+		ActivePlayers: games.getActiveSessions(),	
 	})
 
 }
@@ -210,9 +211,8 @@ func (s *Session) GetPayload() ([]byte, error) {
 func (s *Session) updateSession(content string) {
 	s.AddContent(content)
 	words := sanitizeText(content)
-	
+	s.LastAccessed = time.Now()
 	Challenge := games.GetChallenge(s.challenge)
-	
 	for _, word := range words {
         for index, qouteword := range Challenge.Words {
             if !s.Progress[index] && strings.Contains(word, qouteword) {
@@ -248,6 +248,7 @@ type ResponseStructure struct {
 	Content  string `json:"content"`
 	Attempts int    `json:"attempts"`
 	Progress []bool `json:"progress"`
+	ActivePlayers int `json:"active"`
 }
 
 type ReqStructure struct {
@@ -255,7 +256,19 @@ type ReqStructure struct {
 }
 
 
+func (g *SessionManager) getActiveSessions()int {
+	g.RLock()
+	defer g.Unlock()
+	count:=0 
 
+	now:=time.Now()
+	for _, s:= range g.sessions{
+		if now.Sub(s.LastAccessed)<INACTIVE_THRESHOLD{
+			count++
+		}
+	}
+	return count 
+}
 
 
 
@@ -282,7 +295,7 @@ func (g *SessionManager) findSession(r *http.Request) (*Session, bool){
 }
 
 // game endpoint
-func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
+func GenerateNewContent(w  http.ResponseWriter, r *http.Request) {
 	
     if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
@@ -291,6 +304,12 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	
     if r.Method == "GET" {
+
+
+		// Rate-Limiting on Get is needed. 
+		// if games.getActiveSessions() >= MAXSESSIONS{
+		// 	http.Error(w,"Too Many Players Connected, Try again in a few minutes",http.StatusGatewayTimeout)
+		// }
 		s:= games.ManageSession(w,r)
 		payload, err := s.GetPayload()
 		if err != nil {
@@ -311,12 +330,10 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-        if s.isActive{
+        if  time.Since(s.LastAccessed) < LLM_TIMOUT {
             http.Error(w, "Too many Requests", http.StatusRequestTimeout)
             return
         }
-        s.isActive = true
-        defer func(){ s.isActive = false }()
 
 		if !exists || !s.isValid() {
 			http.Error(w, "Invalid Session", http.StatusUnauthorized)
@@ -377,8 +394,8 @@ func GenerateNewContent(w http.ResponseWriter, r *http.Request) {
                 }
             }
 		}
-
 	}
+
     http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
@@ -391,7 +408,7 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 	client := openai.NewClient()
 	stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("dont ask any questions, you are a autocomplete feature that will complete/ predict the sentence of 100 words from the given word/words, dont ask for context, just reply with whatever comes to your mind"),
+			openai.SystemMessage("dont ask any questions, you are a autocomplete feature that will generate sentence of 100 words from the given word/words, dont ask for context, just reply with whatever comes to your mind"),
 			openai.UserMessage(input),
 		}),
 		Seed:  openai.Int(0),
