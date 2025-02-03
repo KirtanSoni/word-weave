@@ -274,24 +274,26 @@ func (g *SessionManager) getActiveSessions()int {
 
 // Endpoints------ 
 
-func (g *SessionManager) findSession(r *http.Request) (*Session, bool){
-	cookie, err := r.Cookie("session")	
-	SessionID := cookie.Value
-	//if no cookie, set cookie
-	if err != nil || SessionID == "" {
-		return nil, false
-	}
+func (g *SessionManager) findSession(r *http.Request) (*Session, bool) {
+    cookie, err := r.Cookie("session")    
+    if err != nil || cookie == nil {
+        return nil, false
+    }
+    
+    SessionID := cookie.Value
+    if SessionID == "" {
+        return nil, false
+    }
 
-	games.RLock()
-	Session, exists:= games.sessions[SessionID]
-	games.RUnlock()
+    games.RLock()
+    Session, exists := games.sessions[SessionID]
+    games.RUnlock()
 
-	if ! Session.isValid(){
-		fmt.Println("session invalid")
-		return nil, exists
-	}
-	return Session, exists
-
+    if Session == nil || !Session.isValid() {
+        fmt.Println("session invalid")
+        return nil, exists
+    }
+    return Session, exists
 }
 
 // game endpoint
