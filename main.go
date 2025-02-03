@@ -124,7 +124,7 @@ func (g *SessionManager) SaveSession(SessionID string) error {
 		uuid.NewString(), // Unique snapshot ID
 		s.challenge, 
 		toJSON(s.Progress), 
-		toJSON(s.Content), 
+		toJSON(s.Content[:s.Attempts]), 
 		s.Attempts, 
 		time.Now(),
 	)
@@ -170,7 +170,7 @@ func (g *SessionManager) CreateSession(SessionID string, challenge int){
 		Attempts: 0,
 		LastAccessed: time.Now(),
 	}
-	s.Content = append(s.Content, c.Content)
+	s.Content[s.Attempts] = c.Content
 	g.sessions[SessionID] = s
 	
 }
@@ -197,7 +197,7 @@ func (s *Session) GetPayload() ([]byte, error) {
 	// Return Payload
 	return json.Marshal(ResponseStructure{
 		Challenge: s.challenge+1,
-		Content:  s.Content[len(s.Content)-1],
+		Content:  s.Content[s.Attempts],
 		Length:   Challenge.len,
 		Quote:    Challenge.Quote,
 		Author:   Challenge.Author,
@@ -229,7 +229,7 @@ func (s *Session) AddContent(content string){
 		panic("MAX Attempts Reached")
 	}
 	s.Attempts++
-	s.Content = append(s.Content, content)
+	s.Content[s.Attempts] = content
 }
 
 type Challenge struct {
@@ -258,7 +258,7 @@ type ReqStructure struct {
 
 func (g *SessionManager) getActiveSessions()int {
 	g.RLock()
-	defer g.Unlock()
+	defer g.RUnlock()
 	count:=0 
 
 	now:=time.Now()
@@ -363,10 +363,10 @@ func GenerateNewContent(w  http.ResponseWriter, r *http.Request) {
 			return
 		}	
 
-        if !s.Validate(input.Input){
-            http.Error(w, "Invalid Input", http.StatusExpectationFailed)
-            return 
-        }
+        // if !s.Validate(input.Input){
+        //     http.Error(w, "Invalid Input", http.StatusExpectationFailed)
+        //     return 
+        // }
 
 		chunks := make(chan string, 10)
 		var content string

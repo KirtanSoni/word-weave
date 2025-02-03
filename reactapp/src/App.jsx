@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 
 const initialGameState = {
-  qoute: '',
+  qoute: 'Hello how are you',
   byline: '',
   llmResponses: '',
   length: 0,
@@ -221,65 +221,78 @@ export default function App() {
   }
 
   return (
-    <div className='bg-slate-950 min-h-screen p-6'>
-      <h3 className='text-white mb-3'> Quote of the Day</h3>
-      <p className='text-slate-400 mb-6'>
-        Found: {gameState.completed}/{gameState.length} in {gameState.attempts} attempts
-      </p>
+    <div className="bg-black min-h-screen text-white px-6 py-10">
+    <div className="max-w-3xl mx-auto">
+      <h3 className="text-2xl font-semibold text-center mb-4">Quote of the Day</h3>
 
-      <div className="mb-6 p-4 bg-slate-800 rounded-lg">
-      <p className="font-bold text-lg">
-        {gameState.quote?.split(/\s+/).map((word, index) => (
-            <React.Fragment key={index}>
-              {index > 0 && " "}
-              <span className={gameState.progress[index] ? 'text-green-500' : 'text-white'}>
-                {word}
-              </span>
-            </React.Fragment>
-          ))}
-          </p>
-        <p className='text-slate-500 text-sm text-right'>- {gameState.byline}</p>
+      <div className="flex justify-between text-sm text-gray-400 mb-4">
+        <p>Found: {gameState.completed}/{gameState.length}</p>
+        <span>{gameState.attempts} attempts</span>
       </div>
 
-      <div className='space-y-4 mb-6'>
-        <div className='p-4 bg-slate-900 rounded-lg'>
-          <div className='text-slate-300' onMouseUp={handleTextSelection}>
-              {gameState.llmResponses}
+      <div className=" p-6 rounded-xl shadow-md mb-6 ">
+        <p className="font-semibold text-center text-xl leading-relaxed">
+          {gameState.quote?.split(/\s+/).map((word, index) => (
+            <span
+              key={index}
+              className={
+                gameState.progress[index] ? "text-green-400" : "text-gray-100"
+              }
+            >
+              {index > 0 && " "}{word}
+            </span>
+          ))}
+        </p>
+        <p className="text-gray-500 text-right mt-2 italic">~ {gameState.byline}</p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-zinc-950 p-5 rounded-xl border border-zinc-800">
+          <div
+            className="text-gray-300 leading-relaxed cursor-text select-text"
+            onMouseUp={handleTextSelection}
+          >
+            {gameState.llmResponses}
           </div>
         </div>
 
-    {selectedWords.length > 0 && (
-      <div className='mt-4'>
-        <p className='text-slate-400 mb-2'>Selected Words:</p>
-        <div className='flex flex-wrap gap-2'>
-          {selectedWords.map((word, index) => (
-            <span key={index} className='px-2 py-1 bg-slate-800 text-slate-200 rounded'>
-              {word}
-            </span>
-          ))}
+        {selectedWords.length > 0 && (
+          <div>
+            <p className="text-gray-400 text-sm mb-2">Selected Words:</p>
+            <div className="flex flex-wrap gap-2">
+              {selectedWords.map((word, index) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 bg-zinc-800 text-gray-200 rounded-lg border border-zinc-700"
+                >
+                  {word}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-3 mt-4">
+          <button
+            onClick={() => {
+              setSelectedWords([]);
+              clearHighlight();
+            }}
+            className="text-gray-400 hover:text-white transition duration-200"
+          >
+            Clear Selection
+          </button>
+
+          <button
+            onClick={handleSelectionSubmit}
+            disabled={isLoading || selectedWords.length === 0}
+            className="bg-white text-black px-4 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
+          >
+            {isLoading ? "Submitting..." : "Submit Selection"}
+          </button>
         </div>
       </div>
-    )}
-
-    <div className='flex justify-end gap-3'>
-      <button
-         onClick={() => {
-          setSelectedWords([]);
-          clearHighlight();
-        }}
-        className='text-slate-400'
-      >
-        Clear Selection
-      </button>
-      <button
-        onClick={handleSelectionSubmit}
-        disabled = {isLoading || selectedWords.length === 0}
-        className='bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed'
-      >
-        {isLoading ? "Submitting..." : "Submit Selection"}
-      </button>
     </div>
   </div>
-</div>
   );
 }
