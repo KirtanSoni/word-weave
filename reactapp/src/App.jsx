@@ -292,7 +292,7 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <div className="max-w-3xl mx-auto bg-orange-100 border-2 p-3 border-black">
+        <div className="max-w-3xl mx-auto bg-orange-100 border-2 p-3 shadow-orange-950 shadow-md border-black min-h-[80vh]">
           <div className='flex items-center gap-3 mb-4 justify-between'>
           <h3 className="text-xl bg-black text-white inline-block px-2 py-1 font-semibold text-center mb-4 underline underline-offset-4">
             Quote of the Day
@@ -316,7 +316,7 @@ export default function App() {
                   <h4 className='font-semibold mb-3 border-b border-gray-700'>Welcome to WordWeave!</h4>
                   <p className='text-sm text-gray-600 leading-relaxed'>
                     WordWeave is a game where you're given a quote and a random sentence. 
-                    The objective of the game is the find all the words in the quote using only the words in the sentence as prompts for an AI.
+                    The objective of the game is the find all the words in the quote using only the words in the sentence as prompts for an AI. You are allowed to select a continuous subtext from the Content to send to ai as prompt
                   </p>
                 </div>
               </div>
