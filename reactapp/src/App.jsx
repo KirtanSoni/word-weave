@@ -71,14 +71,16 @@ const initialGameState = {
   progress: [],
   completed: 0,
   challenge: 0,
-  isDoneForDay: false
+  isDoneForDay: false,
+  activePlayers: 0
 };
 
 export default function App() {
   const [gameState, setGameState] = useState(initialGameState);
   const [selectedWords, setSelectedWords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isGameWon, setIsGameWon] = useState(false);
+  const [isGameWon, setIsGameWon] = useState(false)
+  const [showInfo, setShowInfo] = useState(false);
 
   const fetchGameData = async () => {
     try {
@@ -96,7 +98,8 @@ export default function App() {
         attempts: result.attempts,
         progress: result.progress,
         completed: result.progress?.filter(Boolean).length,
-        challenge: result.challenge
+        challenge: result.challenge,
+        activePlayers: result.activePlayers
       });
       if (result.progress?.filter(Boolean).length === result.length) {
         setIsGameWon(true);
@@ -244,7 +247,8 @@ export default function App() {
               attempts: result.attempts,
               progress: result.progress,
               completed: result.progress.filter(Boolean).length,
-              challenge: result.challenge
+              challenge: result.challenge,
+              activePlayers: result.activePlayers
             }));
             if (result.progress.filter(Boolean).length === result.length) {
               setIsGameWon(true);
@@ -272,7 +276,7 @@ export default function App() {
   };
 
   return (
-    <div className="bg-neutral-50 min-h-screen font-serif text-black px-6 py-10">
+    <div className={`bg-neutral-50 min-h-screen font-serif text-black ${showInfo ? 'bg-opacity-50' : 'bg-opacity-50'} px-6 py-10`}>
       {gameState.isDoneForDay ? (
         <div className="max-w-3xl mx-auto text-center">
           <div className="p-8 border-2 border-gray-800">
@@ -288,12 +292,37 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <div className="max-w-3xl mx-auto">
-          <div className='flex items-center gap-3 mb-4'>
+        <div className="max-w-3xl mx-auto bg-orange-100 border-2 p-3 border-black">
+          <div className='flex items-center gap-3 mb-4 justify-between'>
           <h3 className="text-xl bg-black text-white inline-block px-2 py-1 font-semibold text-center mb-4 underline underline-offset-4">
             Quote of the Day
           </h3>
+          <button 
+            className="w-6 h-6 rounded-full border-2 border-black flex items-center justify-center text-sm font-medium hover:bg-gray-100 transition-colors duration-200 mb-4"
+            onClick={() => setShowInfo(true)}>i</button>
           </div>
+          {showInfo && (
+            <>
+              {/* Full screen backdrop */}
+              <div 
+                className="fixed inset-0 bg-black bg-opacity-50 z-40"
+
+              >
+                {/* Centered dialog */}
+                <div 
+                  className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 p-6 bg-white shadow-lg border-2 border-gray-200 z-50"
+                  onClick={() => setShowInfo(false)}
+                >
+                  <h4 className='font-semibold mb-3 border-b border-gray-700'>Welcome to WordWeave!</h4>
+                  <p className='text-sm text-gray-600 leading-relaxed'>
+                    WordWeave is a game where you're given a quote and a random sentence. 
+                    The objective of the game is the find all the words in the quote using only the words in the sentence as prompts for an AI.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+          <div className='flex items-center gap-3 mb-2 justify-between'>
           <p className="text-sm text-gray-600 text-left uppercase tracking-widest mb-4">
             {new Date().toLocaleDateString('en-US', { 
               weekday: 'long', 
@@ -302,6 +331,9 @@ export default function App() {
               day: 'numeric' 
             }).toUpperCase()}
           </p>
+          <p className='mb-4 font-serif text-sm text-gray-600'>Active Players: {gameState.activePlayers}</p>
+          </div>
+          
           <div className="flex justify-between mb-4 font-serif text-sm text-gray-600 border-b border-gray-400">
             <p>Attempts: {gameState.attempts}</p>
             <span>Challenge: {gameState.challenge}</span>
@@ -312,7 +344,7 @@ export default function App() {
                 <span
                   key={index}
                   className={`
-                    ${gameState.progress[index] ? "text-green-600" : "text-black"}
+                    ${gameState.progress[index] ? "bg-amber-400 text-black" : "text-black"}
                     ${index ? "first-letter:float-left first-letter:text-4xl first-letter:font-bold first-letter:mr-1 first-letter:mt-1" : ""}
                   `}
                 >
@@ -364,7 +396,7 @@ export default function App() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="bg-white p-8 border border-gray-800 shadow-md">
+              <div className="bg-white min-h-32 p-8 border border-gray-800 shadow-md columns-2 gap-8">
                 <TextSelectionArea 
                   content={gameState.llmResponses}
                   onSelection={(selectedText) => {
@@ -400,6 +432,9 @@ export default function App() {
           )}
         </div>
       )}
+      <div className="fixed bottom-0 left-0 right-0 bg-black text-white py-2 text-center text-sm">
+        <p>Made by <a href='https://github.com/KirtanSoni'className='underline'>Kirtan Soni</a> and <a href='https://github.com/Kushagra1480' className='underline'>Kushagra Kartik</a></p>
+      </div>
     </div>
   );
 }
