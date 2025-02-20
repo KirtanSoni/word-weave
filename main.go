@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -45,6 +44,7 @@ func (g *SessionManager) PopulateChallenges(Challenges []*Challenge) {
 	if len(Challenges) != g.MaxDaily {
 		panic("PopulateChallenges: > MaxDaily ")
 	}
+
 	g.RWMutex.Lock()
 	g.Challenges = Challenges
 	g.RWMutex.Unlock()
@@ -79,7 +79,7 @@ func (g *SessionManager) ManageSession(w http.ResponseWriter, r *http.Request) *
 	games.RLock()
 	s, exists := games.sessions[sessionID]
 	games.RUnlock()
-
+	fmt.Print(games.Challenges[0].Content)
 	//Set Session
 	if !exists || s == nil {
 		// appoint challenge 1
@@ -205,6 +205,7 @@ func (g *SessionManager) GetChallenge(Index int) *Challenge {
 
 func (g *SessionManager) CreateSession(SessionID string, challenge int) {
 	c := g.GetChallenge(challenge)
+	fmt.Print(g.Challenges[challenge].Content, "asdfasdf")
 	re := regexp.MustCompile(`^[a-zA-Z]+$`)
 	result := make([]bool, len(c.Words))
 
@@ -226,6 +227,7 @@ func (g *SessionManager) CreateSession(SessionID string, challenge int) {
 	}
 
 	s.Content[s.Attempts] = c.Content
+	fmt.Print(s.Content , "kk")
 	g.sessions[SessionID] = s
 
 }
@@ -289,7 +291,7 @@ func (s *Session) Validate(content string) bool {
 	if len(s.Content) == 0 {
 		return false
 	}
-	return strings.Contains(s.Content[len(s.Content)-1], content)
+	return strings.Contains(s.Content[s.Attempts], content)
 }
 
 func (s *Session) isComplete() bool {
@@ -543,22 +545,24 @@ func main() {
 		return
 	}
 	defer db.Close()
+	Challenges:= APIChallenges(games.MaxDaily)
 
-	initgame()
+	games.PopulateChallenges(Challenges)
+	PrintAllChallenges(games.Challenges)
+	games.HealthCheck()
+	go scheduleDailyTask()
 
+	
 	http.HandleFunc("/game", GenerateNewContent)
 	http.HandleFunc("/game/next", NextChallenge)
 	http.HandleFunc("/", GetReactSPA().ServeHTTP)
 	http.HandleFunc("/logs", handleLogs)
 	fmt.Println("Starting Server on port " + *addr)
+	PrintChallenge(games.Challenges[0])
 	http.ListenAndServe(*addr, nil)
 }
 
-func initgame() {
-	games.PopulateChallenges(APIChallenges(games.MaxDaily))
-	games.HealthCheck()
-	go scheduleDailyTask()
-}
+	
 
 // Helpers -------
 // Helper to convert slices to JSON
@@ -681,12 +685,14 @@ func APIChallenges(s int) []*Challenge {
 
 	var res []*Challenge = make([]*Challenge, games.MaxDaily)
 	summaries, err := FetchNewsSummaries(5)
+
 	if err != nil {
 		panic("no Content")
 	}
 
 	for i := 0; i < len(res); i++ {
 		content := summaries[i]
+		fmt.Println(content)
 		words := sanitizeText(rawQuotes[i].Quote)
 		res[i] = &Challenge{
 			Quote:   rawQuotes[i].Quote,
@@ -726,6 +732,27 @@ func GetHealth(From time.Time, To time.Time) LogResponse {
 	return response
 }
 
+func PrintChallenge(c *Challenge) {
+    fmt.Println("\n=== Challenge Details ===")
+    fmt.Printf("Quote: %s\n", c.Quote)
+    fmt.Printf("Author: %s\n", c.Author)
+    fmt.Printf("Words to Find: %v\n", c.Words)
+    fmt.Printf("Word Count: %d\n", c.len)
+    fmt.Printf("Content Length: %d\n", len(c.Content))
+    fmt.Printf("Content: %s\n", c.Content)
+    fmt.Println("=====================\n")
+}
+
+// Helper to print all challenges
+func PrintAllChallenges(ch []*Challenge) {
+    fmt.Println("\n*** Printing All Challenges ***")
+    for i, c := range ch {
+        fmt.Printf("\nChallenge #%d:\n", i+1)
+        PrintChallenge(c)
+    }
+    fmt.Println("*** End of Challenges ***\n")
+}
+
 //news
 
 type NewsResponse struct {
@@ -751,7 +778,7 @@ func FetchNewsSummaries(n int) ([]string, error) {
 
 	// Replace with your actual API key
 	apiKey := os.Getenv("NEWSAPI_KEY")
-	url := fmt.Sprintf("https://newsapi.org/v2/top-headlines?country=us&pageSize=%d&category=technology&apiKey=%s", n+1, apiKey)
+	url := fmt.Sprintf("https://newsapi.org/v2/top-headlines?country=us&category=technology&apiKey=%s", apiKey)
 
 	// Create HTTP client with timeout
 	client := &http.Client{}
@@ -790,8 +817,8 @@ func FetchNewsSummaries(n int) ([]string, error) {
 
 	//due to some bug, cant read the first artical. so fetching 6 and reading 2-6
 	// Get min of n and available articles to avoid index out of range
-	numArticles := min(n+1, len(newsResp.Articles))
-	for i := 1; i < numArticles; i++ {
+	numArticles := min(n+3, len(newsResp.Articles))
+	for i := 3; i < numArticles; i++ {
 		article := newsResp.Articles[i]
 		summary := article.Content
 		summaries = append(summaries, summary)
