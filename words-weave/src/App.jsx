@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 const MAX_WORDS = 13;
 
 
@@ -21,36 +21,43 @@ const WordWeave = () => {
     progress: []
   });
 
-  useMemo(() => {
-    const fetchGameData = async () => {
-      try {
-        const response = await fetch('/game');
-        const data = await response.json();
-        setGameData(data);
-        
-        // If you want to update paragraph with the fetched content
-        setParagraph(data.content);
-        
-        // Process the paragraph into word elements after fetching
-        const words = data.content.split(/\s+/);
-        const elements = words.map((word, index) => ({
-          id: `word-${index}`,
-          text: word,
-          originalIndex: index,
-          selected: false
-        }));
-        setWordElements(elements);
-      } catch (error) {
-        console.error('Error fetching game data:', error);
-      }
-    };
-    
-    fetchGameData();
-  }, []); // Empty dependency array ensures this runs only once
+  const fetchGameData = useCallback(async () => {
+    try {
+      const response = await fetch('/game');
+      const data = await response.json();
+      console.log("data", data)
+      setGameData({
+        challenge: data.challenge,
+        quote: data.quote,
+        author: data.author,
+        content: data.content,
+        attempts: data.attempts,
+        progress: data.progress
+      });
+      
+      // If you want to update paragraph with the fetched content
+      setParagraph(data.content);
+      
+      // Process the paragraph into word elements after fetching
+      const words = data.content.split(/\s+/);
+      const elements = words.map((word, index) => ({
+        id: `word-${index}`,
+        text: word,
+        originalIndex: index,
+        selected: false
+      }));
+      setWordElements(elements);
+    } catch (error) {
+      console.error('Error fetching game data:', error);
+    }
+  }, []); 
   useEffect(() => {
-    // This will run whenever gameData changes
+    console.log("game", gameData)
     document.title = `WordWeave - Challenge #${gameData.challenge}`;
   }, [gameData]);
+  useEffect(() => {
+    fetchGameData();
+  }, [fetchGameData]);
   useEffect(() => {
     const words = paragraph.split(/\s+/);
     const elements = words.map((word, index) => ({
@@ -111,19 +118,34 @@ const WordWeave = () => {
     const date = new Date();
     return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
   };
+  console.log(gameData.quote.split(/\s+/))
+  
 
   return (
     <div className="mx-auto bg-white flex flex-col h-screen max-w-full md:max-w-2xl relative">
     <div className="bg-gray-900 text-white sticky top-0 z-10 flex-shrink-0">
       <div className="p-4 flex justify-between items-center">
         <div>
-          <h1 className="text-xl font-bold">WordWeave</h1>
+          <h1 className="text-xl font-bold">WordWeaves</h1>
           <p className="text-sm">{formatDate()}</p>
         </div>
         <button className="text-sm underline">How to Play</button>
       </div>
       <div className="p-6 text-center">
-        <h2 className="text-xl">{gameData.quote}</h2>
+      <h2 className="text-xl">
+      {gameData.quote?.split(/\s+/).map((word, index) => (
+                <span
+                  key={index}
+                  className={`
+                    ${gameData.progress[index] ? "text-green-600" : "text-white"}
+                    ${index ? "first-letter:float-left first-letter:text-4xl first-letter:font-bold first-letter:mr-1 first-letter:mt-1" : ""}
+                  `}
+                >
+                  {index > 0 && " "}{word}
+                </span>
+        ))}
+
+      </h2>
         {gameData.author && <p className="text-sm mt-2">— {gameData.author}</p>}
       </div>
     </div>
@@ -262,13 +284,13 @@ const WordWeave = () => {
                     setWordElements(elements);
                   }
                   
-                  // Reset word selection after receiving complete response
                   setSelectedWords([]);
                   
                 } catch (error) {
                   console.error('Error processing stream:', error);
                   // Show error to user if needed
                 } finally {
+                  fetchGameData()
                   // Reset loading state if needed
                   // setIsLoading(false);
                 }

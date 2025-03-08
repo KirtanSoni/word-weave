@@ -41,12 +41,13 @@ func (s *State) AddContent(content Entry) {
 	if s.Attempts < len(s.Content) {
 		s.Content = append(s.Content, content)
 		s.Attempts++
+		return 
 	}
 	panic("Max Attempts reached. Should Not be able to call AddContent")
 }
 
 func (s *State) IsActive() bool {
-	return time.Now().Sub(s.LastAccessed) < INACTIVE_THRESHOLD
+	return time.Since(s.LastAccessed) < INACTIVE_THRESHOLD
 }
 
 func (s *State) Validate(Input string) bool {
@@ -124,12 +125,13 @@ type Challenge struct {
 }
 
 func GetChallenges(num int) ([]Challenge, error) {
+	quote:=  "The greatest glory in living lies not in never falling, but in rising every time we fall."
 	challenges := []Challenge{
 		{
-			Quote:   "The greatest glory in living lies not in never falling, but in rising every time we fall.",
+			Quote:   quote,
 			Author:  "Nelson Mandela",
 			Content: "Practice makes perfect when learning to code.",
-			Words:   []string{"the", "greatest", "glory", "in", "living", "lies", "not", "never", "falling", "but", "rising", "every", "time", "we", "fall"},
+			Words:   SanitizeAndSplit(quote),
 		},
 		{
 			Quote:   "The way to get started is to quit talking and begin doing.",
