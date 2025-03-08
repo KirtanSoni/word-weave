@@ -41,7 +41,7 @@ func (g *Game) Init(){
 		panic("Challenges not initialized")
 	}
 	g.Challenges = challenges
-	go CronJob()
+	// go CronJob() TODO
 }
 
 

@@ -30,7 +30,7 @@ func main() {
 	defer file.Close()
 
 	game := g.GetGame()
-	// game.Init()
+	game.Init()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", f.GetReactSPA().ServeHTTP)
