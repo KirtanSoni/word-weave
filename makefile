@@ -1,20 +1,21 @@
-.PHONY: all build clean run test vet fmt  frontend deps help db-init db-reset db-import
+.PHONY: all build clean run test vet fmt deps help fbuild
 
 # Default target
-all: vet build
+all: deps fbuild vet build 
 
 # Build the application
 build:
-	go build -o bin/server .
+	go build -o bin/words-weave .
 
 # Clean build artifacts
 clean:
-	rm -rf bin/
+	rm -rf internal/frontend/reactbuild/*
+	rm -rf bin/*
 	go clean
 
 # Run the application
 run: build
-	./bin/server
+	./bin/words-weave
 
 # Run tests
 test:
@@ -28,10 +29,14 @@ vet:
 fmt:
 	go fmt ./...
 
+fbuild:
+	cd words-weave && npm run build
 
 # Install dependencies
 deps:
 	go mod tidy
+	cd words-weave && npm ci
+	
 
 # Show help
 help:
@@ -46,8 +51,5 @@ help:
 	@echo "  lint      - Run golangci-lint"
 	@echo "  frontend  - Build frontend assets"
 	@echo "  deps      - Install dependencies"
-	@echo "  db-init   - Initialize database schema"
-	@echo "  db-reset  - Reset all challenges to unused state"
-	@echo "  db-import - Import challenges from JSON file"
 	@echo "  dev       - Run with hot reload using Air"
 	@echo "  help      - Show this help message"

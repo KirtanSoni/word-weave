@@ -236,6 +236,6 @@ func (g *Game) GetChallengeWords(index int) []string {
 }
 
 func CronJob() {
-	panic("Unimplimented")
+	panic("unimplimented")
 	// Todo : impliment, session cleanup, and save
 }
