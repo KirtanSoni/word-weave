@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 const MAX_WORDS = 13;
 
 
@@ -12,7 +12,45 @@ const WordWeave = () => {
   const [draggedBubbleIndex, setDraggedBubbleIndex] = useState(null);
   const [touchInfo, setTouchInfo] = useState(null);
 
-  // Process paragraph into individual words with tracking
+  const [gameData, setGameData] = useState({
+    challenge: 0,
+    quote: "",
+    author: "",
+    content: "",
+    attempts: 0,
+    progress: []
+  });
+
+  useMemo(() => {
+    const fetchGameData = async () => {
+      try {
+        const response = await fetch('/game');
+        const data = await response.json();
+        setGameData(data);
+        
+        // If you want to update paragraph with the fetched content
+        setParagraph(data.content);
+        
+        // Process the paragraph into word elements after fetching
+        const words = data.content.split(/\s+/);
+        const elements = words.map((word, index) => ({
+          id: `word-${index}`,
+          text: word,
+          originalIndex: index,
+          selected: false
+        }));
+        setWordElements(elements);
+      } catch (error) {
+        console.error('Error fetching game data:', error);
+      }
+    };
+    
+    fetchGameData();
+  }, []); // Empty dependency array ensures this runs only once
+  useEffect(() => {
+    // This will run whenever gameData changes
+    document.title = `WordWeave - Challenge #${gameData.challenge}`;
+  }, [gameData]);
   useEffect(() => {
     const words = paragraph.split(/\s+/);
     const elements = words.map((word, index) => ({
@@ -24,11 +62,9 @@ const WordWeave = () => {
     setWordElements(elements);
   }, [paragraph]);
 
-  // Handle word selection
   const handleWordClick = (index) => {
-    // Check if we've already reached the maximum number of words
     if (selectedWords.length >= MAX_WORDS) {
-      return; // Don't allow more selections
+      return
     }
     
     const newWordElements = [...wordElements];
@@ -41,8 +77,6 @@ const WordWeave = () => {
     
     setWordElements(newWordElements);
   };
-
-  // Handle bubble click (deselect word)
   const handleBubbleClick = (selectedIndex) => {
     const newSelectedWords = selectedWords.filter((_, index) => index !== selectedIndex);
     
@@ -55,17 +89,12 @@ const WordWeave = () => {
     setSelectedWords(newSelectedWords);
     setWordElements(newWordElements);
   };
-
-  // Handle drag start for bubbles
   const handleDragStart = (index) => {
     setDraggedBubbleIndex(index);
   };
-
-  // Handle drag over for drop targets
   const handleDragOver = (e, index) => {
     e.preventDefault();
     if (draggedBubbleIndex !== null && draggedBubbleIndex !== index) {
-      // Reorder the bubbles
       const newSelectedWords = [...selectedWords];
       const draggedWord = newSelectedWords[draggedBubbleIndex];
       newSelectedWords.splice(draggedBubbleIndex, 1);
@@ -75,13 +104,9 @@ const WordWeave = () => {
       setDraggedBubbleIndex(index);
     }
   };
-
-  // Handle drag end
   const handleDragEnd = () => {
     setDraggedBubbleIndex(null);
   };
-
-  // Format date as MM/DD/YYYY
   const formatDate = () => {
     const date = new Date();
     return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
@@ -98,13 +123,13 @@ const WordWeave = () => {
         <button className="text-sm underline">How to Play</button>
       </div>
       <div className="p-6 text-center">
-        <h2 className="text-xl">"Quote"</h2>
+        <h2 className="text-xl">{gameData.quote}</h2>
+        {gameData.author && <p className="text-sm mt-2">— {gameData.author}</p>}
       </div>
     </div>
 
       
       <div className="flex-shrink-0">
-        {/* Selected Words Display */}
         <div className="bg-gray-100 p-4 mx-4 my-6 h-16 flex items-center rounded border border-gray-300">
           {selectedWords.length > 0 ? (
             <p className="w-full text-center">
@@ -115,7 +140,6 @@ const WordWeave = () => {
           )}
         </div>
         
-        {/* Word Bubbles - Draggable */}
         <div className="px-4 pb-4 flex flex-wrap gap-2 flex-shrink-0">
         {selectedWords.map((word, index) => (
           <div 
@@ -125,7 +149,6 @@ const WordWeave = () => {
             onDragOver={(e) => handleDragOver(e, index)}
             onDragEnd={handleDragEnd}
             onTouchStart={(e) => {
-              // Store position for touch drag
               const touch = e.touches[0];
               setTouchInfo({
                 index: index,
@@ -135,9 +158,7 @@ const WordWeave = () => {
             }}
             onTouchMove={(e) => {
               if (touchInfo && touchInfo.index === index) {
-                e.preventDefault(); // Prevent scrolling during drag
-                // Implement touch dragging logic here
-                // This would need a more complex implementation with element positioning
+                e.preventDefault(); 
               }
             }}
             onTouchEnd={() => {
@@ -158,10 +179,8 @@ const WordWeave = () => {
         </div>
       </div>
       
-      {/* Divider */}
       <div className="border-t border-gray-300 mx-4"></div>
       
-      {/* Paragraph - Fixed to bottom */}
       
       <div className="p-4 overflow-y-auto flex-grow">
       <p className="text-gray-900 leading-relaxed">
@@ -182,17 +201,77 @@ const WordWeave = () => {
       </p>
     </div>
     
-    {/* Send button - correctly positioned at root level */}
     <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-10">
       <button 
         className={`rounded-full p-3 shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-300
           ${selectedWords.length > 0 
             ? 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer' 
             : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-70'}`}
-        onClick={() => {
-          if (selectedWords.length > 0) {
-            // Handle send functionality
-            console.log('Sending:', selectedWords.map(word => word.text).join(' '));
+            onClick={async () => {
+              if (selectedWords.length > 0) {
+                // Construct the input string from selected words
+                const inputString = selectedWords.map(word => word.text).join(' ');
+                
+                try {
+                  // Set loading state if needed
+                  // setIsLoading(true);
+                  
+                  // Send POST request to the API
+                  const response = await fetch('/game', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      input: inputString
+                    })
+                  });
+                  
+                  if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                  }
+                  
+                  // Handle streaming response
+                  const reader = response.body.getReader();
+                  const decoder = new TextDecoder();
+                  let streamedText = '';
+                  
+                  // Process the stream chunks
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) {
+                      break;
+                    }
+                    
+                    // Decode the chunk and append to accumulated text
+                    const chunk = decoder.decode(value, { stream: true });
+                    streamedText += chunk;
+                    
+                    // Update paragraph with current accumulated text
+                    setParagraph(streamedText);
+                    
+                    // Also update word elements for the updated paragraph
+                    const words = streamedText.split(/\s+/);
+                    const elements = words.map((word, index) => ({
+                      id: `word-${index}`,
+                      text: word,
+                      originalIndex: index,
+                      selected: false
+                    }));
+                    setWordElements(elements);
+                  }
+                  
+                  // Reset word selection after receiving complete response
+                  setSelectedWords([]);
+                  
+                } catch (error) {
+                  console.error('Error processing stream:', error);
+                  // Show error to user if needed
+                } finally {
+                  // Reset loading state if needed
+                  // setIsLoading(false);
+                }
           }
         }}
         disabled={selectedWords.length === 0}

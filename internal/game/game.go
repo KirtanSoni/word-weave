@@ -100,7 +100,7 @@ func (g *Game) Getgamestate(w http.ResponseWriter, r *http.Request) {
 	//get state for the session ID
 	if !exists {
 		//should not happen
-		panic("failed to assign a session SetSessionID not working properly")
+		g.SessionManager.SetState(sessionID, g.NewState(sessionID, 0))
 	}
 
 	queryParams := r.URL.Query()
@@ -191,10 +191,6 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !s.Validate(req.Input) {
-		http.Error(w, "Invalid Input", http.StatusExpectationFailed)
-		return
-	}
 
 	chunks := make(chan string, 10)
 	var content string
