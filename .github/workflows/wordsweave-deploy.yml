@@ -33,6 +33,10 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > web-server.pem
           chmod 600 web-server.pem
       
+      - name: Stop Service
+        run: |
+          ssh -i web-server.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "sudo systemctl stop words-weave.service && rm -f /home/ubuntu/bin/words-weave"
+          
       - name: Deploy to EC2
         run: |
           scp -i web-server.pem -o StrictHostKeyChecking=no bin/words-weave $EC2_USER@$EC2_HOST:/home/ubuntu/bin/words-weave
