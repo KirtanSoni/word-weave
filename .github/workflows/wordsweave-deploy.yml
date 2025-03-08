@@ -1,0 +1,42 @@
+name: Build and Deploy
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ubuntu
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+            node-version: '18'  
+          
+      - name: Build
+        run: make 
+        
+      - name: Setup SSH
+        run: |
+          echo "$SSH_PRIVATE_KEY" > web-server.pem
+          chmod 600 web-server.pem
+      
+      - name: Deploy to EC2
+        run: |
+          scp -i web-server.pem -o StrictHostKeyChecking=no bin/words-weave $EC2_USER@$EC2_HOST:/home/ubuntu/bin/words-weave
+      
+      - name: Restart Service
+        run: |
+          ssh -i web-server.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "sudo systemctl restart words-weave.service"
