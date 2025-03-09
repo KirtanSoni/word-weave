@@ -12,6 +12,8 @@ const WordWeave = () => {
   const [wordElements, setWordElements] = useState([]);
   const [draggedBubbleIndex, setDraggedBubbleIndex] = useState(null);
   const [touchInfo, setTouchInfo] = useState(null);
+  const [isGameWon, setIsGameWon] = useState(false);
+
 
   const [gameData, setGameData] = useState({
     challenge: 0,
@@ -22,10 +24,26 @@ const WordWeave = () => {
     progress: []
   });
 
-  const fetchGameData = useCallback(async () => {
+  useEffect(() => {
+    if (gameData.progress.length > 0 && gameData.progress.every(item => item === true)) {
+      setIsGameWon(true);
+    } else {
+      setIsGameWon(false);
+    }
+    console.log("gameWon? ", isGameWon)
+  }, [gameData.progress]);
+
+  const fetchGameData = useCallback(async (nextChallenge = false) => {
     try {
-      const response = await fetch('/game');
+      // Use the nextChallenge parameter to determine the URL
+      const url = nextChallenge ? '/game?next=true' : '/game';
+      const response = await fetch(url);
       const data = await response.json();
+      
+      // Always reset game state when fetching new data
+      setIsGameWon(false);
+      setSelectedWords([]);
+      
       setGameData({
         challenge: data.challenge,
         quote: data.quote,
@@ -35,6 +53,7 @@ const WordWeave = () => {
         progress: data.progress
       });
       setParagraph(data.content);
+      
       const words = data.content.split(/\s+/);
       const elements = words.map((word, index) => ({
         id: `word-${index}`,
@@ -47,6 +66,9 @@ const WordWeave = () => {
       console.error('Error fetching game data:', error);
     }
   }, []); 
+  const handleNextChallenge = () => {
+    fetchGameData(true);
+  };
   useEffect(() => {
     document.title = `WordWeave - Challenge #${gameData.challenge}`;
   }, [gameData]);
@@ -109,6 +131,18 @@ const WordWeave = () => {
   const handleDragEnd = () => {
     setDraggedBubbleIndex(null);
   };
+  const WinScreen = () => (
+    <div className="flex flex-col items-center justify-center p-8 text-center">
+      <h2 className="text-3xl font-bold text-green-700 mb-4">You've won!</h2>
+      <p className="mb-6">Congratulations! You've completed this challenge.</p>
+      <button 
+        onClick={() => handleNextChallenge()} 
+        className="bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-6 rounded-full shadow-lg transition-colors"
+      >
+        Next Challenge
+      </button>
+    </div>
+  );
   const formatDate = () => {
     const date = new Date();
     return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
@@ -117,7 +151,7 @@ const WordWeave = () => {
     if (selectedWords.length > 0) {
       const inputString = selectedWords.map(word => word.text).join(' ');
       
-      try {
+      try { 
         const response = await fetch('/game', {
           method: 'POST',
           headers: {
@@ -167,6 +201,10 @@ const WordWeave = () => {
   return (
     <div className="mx-auto bg-white flex flex-col h-screen max-w-full md:max-w-2xl lg:max-w-4xl relative font-sans">
       <Header gameData = {gameData} formatDate = {formatDate}/>
+      {isGameWon ? (
+        <WinScreen />
+      ) : (
+        <>
       <div className="flex-grow flex flex-col md:justify-center md:mt-4">
         <div className="flex-shrink-0">
           <div className="bg-gray-100 p-4 mx-4 my-6 h-16 flex items-center rounded border border-gray-300">
@@ -239,7 +277,10 @@ const WordWeave = () => {
           </p>
         </div>
       </div>
+        </>
+      )}
       
+      {!isGameWon && (
       <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-10">
         <button 
           className={`rounded-full p-3 shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-300
@@ -255,6 +296,7 @@ const WordWeave = () => {
           </svg>
         </button>
       </div> 
+      )}
     </div>
   );}
 
