@@ -16,7 +16,7 @@ import (
 
 var (
 	LLM_TIMOUT    = 3 * time.Second
-	MAXCHALLENGES = 5
+	MAXCHALLENGES = 3
 	MAX_ATTEMPTS  = 25
 )
 
@@ -32,16 +32,18 @@ func GetGame() *Game {
 	return game
 }
 
-func (g *Game) Init(){
+func (g *Game) SetChallenges(challenges []m.Challenge){
 	g.SessionManager.Lock()
 	defer g.SessionManager.Unlock()
-
+	g.Challenges = challenges	
+}
+func (g *Game) Init(){
 	challenges, err := m.GetChallenges(MAXCHALLENGES)
 	if err != nil {
 		panic("Challenges not initialized")
 	}
-	g.Challenges = challenges
-	// go CronJob() TODO
+	g.SetChallenges(challenges)
+	go g.CronJob()
 }
 
 
@@ -66,6 +68,9 @@ func (g *Game) NewState(sessionid string, challenge int) *m.State {
 }
 
 func (g *Game) isComplete(state *m.State) bool {
+	if state.Attempts>=MAX_ATTEMPTS{
+		return true
+	}
 	for i := range state.Progress {
 		if !state.Progress[i] {
 			return false
@@ -106,7 +111,7 @@ func (g *Game) Getgamestate(w http.ResponseWriter, r *http.Request) {
 	queryParams := r.URL.Query()
 	next := queryParams.Get("next")
 	//get next state if eligible
-	if next != "" && exists && g.isComplete(state) {
+	if next != "" && exists && g.isComplete(state)  {
 
 		//could be error prone
 		err = g.setNextState(state)
@@ -203,7 +208,11 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 		case chunk, ok := <-chunks:
 			if !ok {
 				// update session after streaming is over
-				s.UpdateSession(req.Input, content, g.GetChallengeWords(s.Challenge))
+				err:= s.UpdateSession(req.Input, content, g.GetChallengeWords(s.Challenge))
+				if err != nil {
+					http.Error(w, "Session Could not update, check microservice code", http.StatusBadRequest)
+					return
+				}
 				if s.IsComplete() {
 					db.SaveState(s)
 				}
@@ -231,7 +240,75 @@ func (g *Game) GetChallengeWords(index int) []string {
 	return g.Challenges[index].Words
 }
 
-func CronJob() {
-	panic("unimplimented")
-	// Todo : impliment, session cleanup, and save
+func (g *Game) CronJob() {
+		
+
+		now := time.Now()
+		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+		durationUntilMidnight := time.Until(nextMidnight)
+		time.Sleep(durationUntilMidnight)
+		g.MidNightUpdate()
+		// After running once, set up the ticker to run every 24 hours.
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+	
+		// Keep running the task every 24 hours.
+		for range ticker.C {
+			g.MidNightUpdate()
+		}
+	
+}
+
+func (g *Game) MidNightUpdate() {
+	fmt.Println("Running scheduled task at midnight")
+
+	g.SessionManager.SaveAllSessionsToDB()
+	g.SessionManager.ClearAllSessions()
+
+	newChallenges := APIChallenges(MAXCHALLENGES) // Fetch new challenges
+	g.SetChallenges(newChallenges)
+}
+
+func APIChallenges(s int) []m.Challenge {
+	resp, err := http.Get("https://zenquotes.io/api/quotes")
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+	type tempQuote struct {
+		Quote  string `json:"q"`
+		Author string `json:"a"`
+	}
+	var rawQuotes []tempQuote
+
+	// Parse JSON
+	if err := json.Unmarshal(body, &rawQuotes); err != nil {
+		return nil
+	}
+
+	var res []m.Challenge = make([]m.Challenge, s)
+
+	if err != nil {
+		panic("no Content")
+	}
+
+	summaries := l.LLMSummaries(s)
+
+	for i := 0; i < len(res); i++ {
+		content := summaries[i]
+		fmt.Println(content)
+		words := m.SanitizeAndSplit(rawQuotes[i].Quote)
+		res[i] = m.Challenge{
+			Quote:   rawQuotes[i].Quote,
+			Author:  rawQuotes[i].Author,
+			Content: content,
+			Words:   words,
+		}
+	}
+	return res
 }

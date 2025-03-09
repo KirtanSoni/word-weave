@@ -5,6 +5,11 @@ import (
 
 	"github.com/openai/openai-go"
 )
+func LLMSummaries(s int)[]string{
+	//TODO
+	return []string{"df"}
+}
+
 
 func StreamingLLM(input string, ctx context.Context, output chan string) string {
 	client := openai.NewClient()

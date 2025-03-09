@@ -77,7 +77,7 @@ func (s *SessionManager) SaveAllSessionsToDB() {
 	panic("unimplemented")
 }
 
-func (s *SessionManager) clearAllSessions() {
+func (s *SessionManager) ClearAllSessions() {
 	s.Lock()
 	defer s.Unlock()
 	s.sessions = make(map[string]*m.State)
