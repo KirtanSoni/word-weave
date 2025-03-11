@@ -3,7 +3,6 @@ package models
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -41,19 +40,20 @@ type State struct {
 	LastAccessed time.Time
 }
 
-func (s *State) AddContent(content Entry) {
-	if s.Attempts < len(s.Content) {
-		s.Content = append(s.Content, content)
-		s.Attempts++
-		return 
+func (s *State) addContent(content Entry) {
+	if s.Attempts >= len(s.Content) {
+		panic("Max Attempts reached. Should Not be able to call AddContent")
 	}
-	panic("Max Attempts reached. Should Not be able to call AddContent")
+	s.Content = append(s.Content, content)
+	s.Attempts++
+	return 
 }
 
 func (s *State) IsActive() bool {
 	return time.Since(s.LastAccessed) < INACTIVE_THRESHOLD
 }
 
+//Not Used Yet
 func (s *State) Validate(Input string) bool {
 	freq := make(map[string]int)
 	content := SanitizeAndSplit(s.Content[len(s.Content)-1].Content)
@@ -69,25 +69,18 @@ func (s *State) Validate(Input string) bool {
 	return true
 }
 
-func (s *State) IsComplete() bool {
-	for _, found := range s.Progress {
-		if !found {
-			return false
-		}
-	}
-	return true
-}
+
 func (s *State) UpdateSession(input string, content string, challengewords []string) error {
 	entry := Entry{Input: input, Content: content}
-	s.AddContent(entry)
-	err := s.FindCommonWords(entry.Content, challengewords)
+	s.addContent(entry)
+	err := s.findCommonWords(entry.Content, challengewords)
 	if err != nil {
 		return err
 	}
  	return nil
 }
 
-func (s *State) FindCommonWords(content string, challengewords []string) error {
+func (s *State) findCommonWords(content string, challengewords []string) error {
 	words := SanitizeAndSplit(content)
 	reqBody := struct {
 		Content        []string `json:"content"`
@@ -111,10 +104,11 @@ func (s *State) FindCommonWords(content string, challengewords []string) error {
 	var stemResp struct{
 		MatchedIndices    [][]int  `json:"matched_indices"`
 	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&stemResp); err != nil {
 		return err
 	}
-	log.Println(stemResp.MatchedIndices)
+
 	for _, match := range stemResp.MatchedIndices {
 		challengeIdx := match[1]
 		s.Progress[challengeIdx] = true

@@ -1,10 +1,12 @@
 package game
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -37,13 +39,10 @@ func (g *Game) SetChallenges(challenges []m.Challenge){
 	defer g.SessionManager.Unlock()
 	g.Challenges = challenges	
 }
-func (g *Game) Init(){
-	challenges, err := m.GetChallenges(MAXCHALLENGES)
-	if err != nil {
-		panic("Challenges not initialized")
-	}
+func (g *Game) Init(ctx context.Context){
+	challenges := APIChallenges(MAXCHALLENGES,ctx)
 	g.SetChallenges(challenges)
-	go g.CronJob()
+	go g.CronJob(ctx)
 }
 
 
@@ -191,7 +190,7 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.IsComplete() {
+	if g.isComplete(s) {
 		w.WriteHeader(http.StatusExpectationFailed)
 		return
 	}
@@ -213,7 +212,7 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "Session Could not update, check microservice code", http.StatusBadRequest)
 					return
 				}
-				if s.IsComplete() {
+				if g.isComplete(s) {
 					db.SaveState(s)
 				}
 				return
@@ -240,38 +239,39 @@ func (g *Game) GetChallengeWords(index int) []string {
 	return g.Challenges[index].Words
 }
 
-func (g *Game) CronJob() {
+func (g *Game) CronJob(ctx context.Context) {
 		
 
 		now := time.Now()
 		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
 		durationUntilMidnight := time.Until(nextMidnight)
 		time.Sleep(durationUntilMidnight)
-		g.MidNightUpdate()
+		g.MidNightUpdate(ctx)
 		// After running once, set up the ticker to run every 24 hours.
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 	
 		// Keep running the task every 24 hours.
 		for range ticker.C {
-			g.MidNightUpdate()
+			g.MidNightUpdate(ctx)
 		}
 	
 }
 
-func (g *Game) MidNightUpdate() {
-	fmt.Println("Running scheduled task at midnight")
+func (g *Game) MidNightUpdate(ctx context.Context) {
+	log.Println("Running scheduled task at midnight")
 
-	g.SessionManager.SaveAllSessionsToDB()
-	g.SessionManager.ClearAllSessions()
+	// g.SessionManager.SaveAllSessionsToDB()
+	// g.SessionManager.ClearAllSessions()
 
-	newChallenges := APIChallenges(MAXCHALLENGES) // Fetch new challenges
+	newChallenges := APIChallenges(MAXCHALLENGES, ctx) // Fetch new challenges
 	g.SetChallenges(newChallenges)
 }
 
-func APIChallenges(s int) []m.Challenge {
+func APIChallenges(s int, ctx context.Context) []m.Challenge {
 	resp, err := http.Get("https://zenquotes.io/api/quotes")
 	if err != nil {
+		log.Println("unable to fetch qoutes from zenquotes")
 		return nil
 	}
 	defer resp.Body.Close()
@@ -293,11 +293,7 @@ func APIChallenges(s int) []m.Challenge {
 
 	var res []m.Challenge = make([]m.Challenge, s)
 
-	if err != nil {
-		panic("no Content")
-	}
-
-	summaries := l.LLMSummaries(s)
+	summaries := l.LLMSummaries(s,ctx)
 
 	for i := 0; i < len(res); i++ {
 		content := summaries[i]

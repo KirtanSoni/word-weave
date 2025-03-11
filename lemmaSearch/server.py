@@ -4,6 +4,11 @@ from typing import List
 import nltk
 from nltk.stem import PorterStemmer
 
+
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 # Initialize FastAPI
 app = FastAPI(title="Word Stemming Microservice")
 
@@ -46,5 +51,8 @@ async def health_check():
 
 
 if __name__ == "__main__":
+    # Add this near the beginning of your script
+
+
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

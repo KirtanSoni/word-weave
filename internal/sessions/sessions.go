@@ -1,7 +1,6 @@
 package sessions
 
 import (
-	"log"
 	"net/http"
 	"sync"
 
@@ -60,7 +59,7 @@ func (s *SessionManager) GetSessionID(r *http.Request) (string, error) {
 	return sessionID, nil
 }
 
-// uses other package mentods
+// Not used yet
 func (s *SessionManager) getActivePlayers() int {
 	s.RLock()
 	defer s.RUnlock()
@@ -73,6 +72,7 @@ func (s *SessionManager) getActivePlayers() int {
 	return counter
 }
 
+// Todo
 func (s *SessionManager) SaveAllSessionsToDB() {
 	panic("unimplemented")
 }
@@ -81,5 +81,4 @@ func (s *SessionManager) ClearAllSessions() {
 	s.Lock()
 	defer s.Unlock()
 	s.sessions = make(map[string]*m.State)
-	log.Println("Clearing Sessions...")
 }

@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
 	"os"
 
-	g "github.com/kirtansoni/words-weave/internal/game"
 	f "github.com/kirtansoni/words-weave/internal/frontend"
+	g "github.com/kirtansoni/words-weave/internal/game"
 )
 
 var (
@@ -28,9 +29,9 @@ func main() {
 	flag.Parse()
 	file := InitalizeLogging(*logfile)
 	defer file.Close()
-
+	ctx := context.Background()
 	game := g.GetGame()
-	game.Init()
+	game.Init(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", f.GetReactSPA().ServeHTTP)
