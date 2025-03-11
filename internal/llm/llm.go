@@ -3,15 +3,14 @@ package llm
 import (
 	"context"
 
-	"log"
 	"github.com/openai/openai-go"
+	"log"
 )
-func LLMSummaries(s int,ctx context.Context)[]string{
+
+func LLMSummaries(s int, ctx context.Context) []string {
 	client := openai.NewClient()
-
 	contents := make([]string, s)
-
-	for i := range(s){
+	for i := range s {
 		completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 			Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
 				openai.UserMessage("Write a paragraph of a random fact about anything you can think of. paragraph should be of 100 words"),
@@ -24,10 +23,8 @@ func LLMSummaries(s int,ctx context.Context)[]string{
 		}
 		contents[i] = completion.Choices[0].Message.Content
 	}
-	
 	return contents
 }
-
 
 func StreamingLLM(input string, ctx context.Context, output chan string) string {
 	client := openai.NewClient()
