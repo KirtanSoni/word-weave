@@ -1,6 +1,9 @@
 package models
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 	"unicode"
@@ -37,19 +40,20 @@ type State struct {
 	LastAccessed time.Time
 }
 
-func (s *State) AddContent(content Entry) {
-	if s.Attempts < len(s.Content) {
-		s.Content = append(s.Content, content)
-		s.Attempts++
-		return 
+func (s *State) addContent(content Entry) {
+	if s.Attempts >= len(s.Content) {
+		panic("Max Attempts reached. Should Not be able to call AddContent")
 	}
-	panic("Max Attempts reached. Should Not be able to call AddContent")
+	s.Content = append(s.Content, content)
+	s.Attempts++
+	return 
 }
 
 func (s *State) IsActive() bool {
 	return time.Since(s.LastAccessed) < INACTIVE_THRESHOLD
 }
 
+//Not Used Yet
 func (s *State) Validate(Input string) bool {
 	freq := make(map[string]int)
 	content := SanitizeAndSplit(s.Content[len(s.Content)-1].Content)
@@ -65,30 +69,52 @@ func (s *State) Validate(Input string) bool {
 	return true
 }
 
-func (s *State) IsComplete() bool {
-	for _, found := range s.Progress {
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-func (s *State) UpdateSession(input string, content string, challengewords []string) {
+
+func (s *State) UpdateSession(input string, content string, challengewords []string) error {
 	entry := Entry{Input: input, Content: content}
-	s.AddContent(entry)
-	s.FindCommonWords(entry.Content, challengewords)
-
+	s.addContent(entry)
+	err := s.findCommonWords(entry.Content, challengewords)
+	if err != nil {
+		return err
+	}
+ 	return nil
 }
 
-func (s *State) FindCommonWords(content string, challengewords []string) {
+func (s *State) findCommonWords(content string, challengewords []string) error {
 	words := SanitizeAndSplit(content)
-	for _, word := range words {
-		for index, qouteword := range challengewords {
-			if !s.Progress[index] && strings.Contains(word, qouteword) {
-				s.Progress[index] = true
-			}
-		}
+	reqBody := struct {
+		Content        []string `json:"content"`
+		ChallengeWords []string `json:"challenge_words"`
+	}{words, challengewords}
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
 	}
+	resp, err := http.Post(
+		"http://localhost:8000/find-common-words",
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	
+	// Parse the response
+	var stemResp struct{
+		MatchedIndices    [][]int  `json:"matched_indices"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&stemResp); err != nil {
+		return err
+	}
+
+	for _, match := range stemResp.MatchedIndices {
+		challengeIdx := match[1]
+		s.Progress[challengeIdx] = true
+	}
+
+	return nil
 }
 
 type RequestStruct struct {
@@ -125,67 +151,34 @@ type Challenge struct {
 }
 
 func GetChallenges(num int) ([]Challenge, error) {
-	quote:=  "The greatest glory in living lies not in never falling, but in rising every time we fall."
+	quote1:=  "When you reach the end of your rope, tie a knot in it and hang on."
+	quote2:=  "Always remember that you are absolutely unique. Just like everyone else."
+	quote3:=  "Don't judge each day by the harvest you reap but by the seeds that you plant."
+	quote4:=  "The future belongs to those who believe in the beauty of their dreams."
 	challenges := []Challenge{
 		{
-			Quote:   quote,
-			Author:  "Nelson Mandela",
-			Content: "Practice makes perfect when learning to code.",
-			Words:   SanitizeAndSplit(quote),
-		},
-		{
-			Quote:   "The way to get started is to quit talking and begin doing.",
-			Author:  "Walt Disney",
-			Content: "Algorithms are step by step procedures for calculations.",
-			Words:   []string{"the", "way", "to", "get", "started", "is", "quit", "talking", "and", "begin", "doing"},
-		},
-		{
-			Quote:   "Your time is limited, so don't waste it living someone else's life.",
-			Author:  "Steve Jobs",
-			Content: "Data structures are ways to organize and store data.",
-			Words:   []string{"your", "time", "is", "limited", "so", "don't", "waste", "it", "living", "someone", "else's", "life"},
-		},
-		{
-			Quote:   "If life were predictable it would cease to be life, and be without flavor.",
-			Author:  "Eleanor Roosevelt",
-			Content: "Concurrency allows multiple computations to happen simultaneously.",
-			Words:   []string{"if", "life", "were", "predictable", "it", "would", "cease", "to", "be", "and", "without", "flavor"},
-		},
-		{
-			Quote:   "Life is what happens when you're busy making other plans.",
-			Author:  "John Lennon",
-			Content: "Go channels provide a way for goroutines to communicate.",
-			Words:   []string{"life", "is", "what", "happens", "when", "you're", "busy", "making", "other", "plans"},
-		},
-		{
-			Quote:   "Spread love everywhere you go. Let no one ever come to you without leaving happier.",
-			Author:  "Mother Teresa",
-			Content: "Interfaces define behavior rather than implementation.",
-			Words:   []string{"spread", "love", "everywhere", "you", "go", "let", "no", "one", "ever", "come", "to", "without", "leaving", "happier"},
-		},
-		{
-			Quote:   "When you reach the end of your rope, tie a knot in it and hang on.",
+			Quote:  quote1,
 			Author:  "Franklin D. Roosevelt",
 			Content: "Memory allocation in Go is handled automatically by the runtime.",
-			Words:   []string{"when", "you", "reach", "the", "end", "of", "your", "rope", "tie", "a", "knot", "in", "it", "and", "hang", "on"},
+			Words:   SanitizeAndSplit(quote1),
 		},
 		{
-			Quote:   "Always remember that you are absolutely unique. Just like everyone else.",
+			Quote:   quote2,
 			Author:  "Margaret Mead",
 			Content: "Error handling is an essential part of robust programming.",
-			Words:   []string{"always", "remember", "that", "you", "are", "absolutely", "unique", "just", "like", "everyone", "else"},
+			Words:  SanitizeAndSplit(quote2),
 		},
 		{
 			Quote:   "Don't judge each day by the harvest you reap but by the seeds that you plant.",
 			Author:  "Robert Louis Stevenson",
 			Content: "Testing ensures your code works as expected under various conditions.",
-			Words:   []string{"don't", "judge", "each", "day", "by", "the", "harvest", "you", "reap", "but", "seeds", "that", "plant"},
+			Words:    SanitizeAndSplit(quote3),
 		},
 		{
 			Quote:   "The future belongs to those who believe in the beauty of their dreams.",
 			Author:  "Eleanor Roosevelt",
 			Content: "Documentation helps others understand your code and its purpose.",
-			Words:   []string{"the", "future", "belongs", "to", "those", "who", "believe", "in", "the", "beauty", "of", "their", "dreams"},
+			Words:   SanitizeAndSplit(quote4),
 		},
 	}
 
