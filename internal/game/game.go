@@ -46,11 +46,11 @@ func (g *Game) Init(ctx context.Context) {
 }
 
 func (g *Game) IsValidState(state *m.State) bool {
-	today := time.Now().Truncate(24 * time.Hour)
-	lastAccessed := state.LastAccessed.Truncate(24 * time.Hour)
-	if !lastAccessed.Equal(today) {
-		return false
-	}
+	// today := time.Now().Truncate(24 * time.Hour)
+	// lastAccessed := state.LastAccessed.Truncate(24 * time.Hour)
+	// if !lastAccessed.Equal(today) {
+	// 	return false
+	// }
 	return true
 }
 
