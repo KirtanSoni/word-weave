@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
@@ -40,9 +39,10 @@ func (g *Game) SetChallenges(challenges []m.Challenge) {
 	g.Challenges = challenges
 }
 func (g *Game) Init(ctx context.Context) {
-	challenges := APIChallenges(MAXCHALLENGES, ctx)
+	
+	challenges := m.GetChallenges() 
 	g.SetChallenges(challenges)
-	go g.CronJob(ctx)
+	// go g.CronJob(ctx)
 }
 
 func (g *Game) IsValidState(state *m.State) bool {
@@ -237,72 +237,72 @@ func (g *Game) GetChallengeWords(index int) []string {
 	return g.Challenges[index].Words
 }
 
-func (g *Game) CronJob(ctx context.Context) {
+// func (g *Game) CronJob(ctx context.Context) {
 
-	now := time.Now()
-	nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
-	durationUntilMidnight := time.Until(nextMidnight)
-	time.Sleep(durationUntilMidnight)
-	g.MidNightUpdate(ctx)
-	// After running once, set up the ticker to run every 24 hours.
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
+// 	now := time.Now()
+// 	nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+// 	durationUntilMidnight := time.Until(nextMidnight)
+// 	time.Sleep(durationUntilMidnight)
+// 	g.MidNightUpdate(ctx)
+// 	// After running once, set up the ticker to run every 24 hours.
+// 	ticker := time.NewTicker(24 * time.Hour)
+// 	defer ticker.Stop()
 
-	// Keep running the task every 24 hours.
-	for range ticker.C {
-		g.MidNightUpdate(ctx)
-	}
+// 	// Keep running the task every 24 hours.
+// 	for range ticker.C {
+// 		g.MidNightUpdate(ctx)
+// 	}
 
-}
+// }
 
-func (g *Game) MidNightUpdate(ctx context.Context) {
-	log.Println("Running scheduled task at midnight")
+// func (g *Game) MidNightUpdate(ctx context.Context) {
+// 	log.Println("Running scheduled task at midnight")
 
-	// g.SessionManager.SaveAllSessionsToDB()
-	// g.SessionManager.ClearAllSessions()
+// 	// g.SessionManager.SaveAllSessionsToDB()
+// 	// g.SessionManager.ClearAllSessions()
 
-	newChallenges := APIChallenges(MAXCHALLENGES, ctx) // Fetch new challenges
-	g.SetChallenges(newChallenges)
-}
+// 	newChallenges := APIChallenges(MAXCHALLENGES, ctx) // Fetch new challenges
+// 	g.SetChallenges(newChallenges)
+// }
 
-func APIChallenges(s int, ctx context.Context) []m.Challenge {
-	resp, err := http.Get("https://zenquotes.io/api/quotes")
-	if err != nil {
-		log.Println("unable to fetch qoutes from zenquotes")
-		return nil
-	}
-	defer resp.Body.Close()
+// func APIChallenges(s int, ctx context.Context) []m.Challenge {
+// 	resp, err := http.Get("https://zenquotes.io/api/quotes")
+// 	if err != nil {
+// 		log.Println("unable to fetch qoutes from zenquotes")
+// 		return nil
+// 	}
+// 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil
-	}
-	type tempQuote struct {
-		Quote  string `json:"q"`
-		Author string `json:"a"`
-	}
-	var rawQuotes []tempQuote
+// 	body, err := io.ReadAll(resp.Body)
+// 	if err != nil {
+// 		return nil
+// 	}
+// 	type tempQuote struct {
+// 		Quote  string `json:"q"`
+// 		Author string `json:"a"`
+// 	}
+// 	var rawQuotes []tempQuote
+// 	fmt.Println(body)
+// 	// Parse JSON
+// 	if err := json.Unmarshal(body, &rawQuotes); err != nil {
+// 		log.Println(err)
+// 	}
+// 	fmt.Println("Number of rawQoutes:", len(rawQuotes))
 
-	// Parse JSON
-	if err := json.Unmarshal(body, &rawQuotes); err != nil {
-		return nil
-	}
-	fmt.Println("Number of rawQoutes:", len(rawQuotes))
+// 	var res []m.Challenge = make([]m.Challenge, s)
 
-	var res []m.Challenge = make([]m.Challenge, s)
+// 	// summaries := l.LLMSummaries(s, ctx)
+// 	// fmt.Println("Number of summaries:", len(summaries))
 
-	// summaries := l.LLMSummaries(s, ctx)
-	// fmt.Println("Number of summaries:", len(summaries))
-
-	for i := 0; i < len(res); i++ {
-		content := "The honeybee, an insect known for its role in pollination, has a highly organized social structure within the hive, which can house up to 60,000 bees. At its core is the queen, whose primary function is reproduction, laying up to 2,000 eggs per day. Worker bees, all female, engage in various roles based on age, from caring for larvae to foraging for nectar. Remarkably, the structure of a honeycomb is composed of perfect hexagons, a shape that allows for maximum efficiency in storing honey and larvae. Moreover, honeybees communicate through complex \"waggle dances,\" conveying information about the direction and distance of food sources to other hive members."
-		words := m.SanitizeAndSplit(rawQuotes[i].Quote)
-		res[i] = m.Challenge{
-			Quote:   rawQuotes[i].Quote,
-			Author:  rawQuotes[i].Author,
-			Content: content,
-			Words:   words,
-		}
-	}
-	return res
-}
+// 	for i := 0; i < len(res); i++ {
+// 		content := "The honeybee, an insect known for its role in pollination, has a highly organized social structure within the hive, which can house up to 60,000 bees. At its core is the queen, whose primary function is reproduction, laying up to 2,000 eggs per day. Worker bees, all female, engage in various roles based on age, from caring for larvae to foraging for nectar. Remarkably, the structure of a honeycomb is composed of perfect hexagons, a shape that allows for maximum efficiency in storing honey and larvae. Moreover, honeybees communicate through complex \"waggle dances,\" conveying information about the direction and distance of food sources to other hive members."
+// 		words := m.SanitizeAndSplit(rawQuotes[i].Quote)
+// 		res[i] = m.Challenge{
+// 			Quote:   rawQuotes[i].Quote,
+// 			Author:  rawQuotes[i].Author,
+// 			Content: content,
+// 			Words:   words,
+// 		}
+// 	}
+// 	return res
+// }
