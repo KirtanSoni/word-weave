@@ -124,10 +124,6 @@
       }
     }, [])
 
-    const handleNextChallenge = useCallback(() => {
-      fetchGameData(true)
-    }, [fetchGameData])
-
     useEffect(() => {
       document.title = `WordWeave - Challenge #${gameData.challenge}`
     }, [gameData])
@@ -295,33 +291,54 @@
       if (selectedWords.length > 0) {
         const inputString = selectedWords.map((word) => word.text).join(" ")
 
-        try {
-
-          setParagraph(paragraph + " " + inputString)
-
-          const newProgress = [...gameData.progress]
-          for (let i = 0; i < newProgress.length; i++) {
-            if (Math.random() > 0.7) {
-              newProgress[i] = true
-            }
-          }
-
-          setGameData({
-            ...gameData,
-            progress: newProgress,
-            attempts: gameData.attempts + 1,
+        try {const response = await fetch('/game', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            input: inputString
           })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        if (response.body) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let streamedText = '';
+        
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              break;
+            }
+            const chunk = decoder.decode(value, { stream: true });
+            streamedText += chunk;
+            
+            setParagraph(streamedText);
+            const words = streamedText.split(/\s+/);
+            const elements = words.map((word, index) => ({
+              id: `word-${index}`,
+              text: word,
+              originalIndex: index,
+              selected: false
+            }));
+            setWordElements(elements);
+          }
+        } else {
+          console.warn("response body empty")
+        }
+          
 
           setSelectedWords([])
 
-          setWordElements((prev) => {
-            return prev.map((word) => ({
-              ...word,
-              selected: false,
-            }))
-          })
         } catch (error) {
           console.error("Error processing submission:", error)
+        } finally {
+          fetchGameData()
         }
       }
     }, [selectedWords, paragraph, gameData])
@@ -378,7 +395,7 @@
         />
 
         {isGameWon ? (
-          <PixelWinScreen onNextChallenge={handleNextChallenge} />
+          <PixelWinScreen onNextChallenge={() => fetchGameData(true)} />
         ) : (
           <>
             <div className="flex-grow flex flex-col md:justify-center md:mt-4 px-4">

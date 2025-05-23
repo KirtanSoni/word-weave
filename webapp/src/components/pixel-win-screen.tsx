@@ -5,7 +5,7 @@ import { PixelButton } from "./pixel-ui/pixel-button"
 import Confetti from "./pixel-ui/confetti"
 
 interface PixelWinScreenProps {
-  onNextChallenge: () => void
+  onNextChallenge: () => Promise<void>
 }
 
 const PixelWinScreen = ({ onNextChallenge }: PixelWinScreenProps) => {

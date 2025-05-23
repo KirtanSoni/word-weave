@@ -40,7 +40,6 @@ body {
   position: relative;
   border-style: solid;
   border-width: 4px;
-  border-image: url("/images/border.png") 4 repeat;
   image-rendering: pixelated;
   box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
 }
@@ -62,7 +61,6 @@ body {
   position: relative;
   border-style: solid;
   border-width: 4px;
-  border-image: url("/images/button-border.png") 4 repeat;
   image-rendering: pixelated;
   transition: all 0.1s;
   display: flex;
@@ -78,7 +76,6 @@ body {
   position: relative;
   border-style: solid;
   border-width: 4px;
-  border-image: url("/images/bubble-border.png") 4 repeat;
   image-rendering: pixelated;
   transition: all 0.1s;
 }
@@ -87,7 +84,6 @@ body {
   position: relative;
   border-style: solid;
   border-width: 4px;
-  border-image: url("/images/bubble-empty-border.png") 4 repeat;
   image-rendering: pixelated;
 }
 
@@ -95,7 +91,6 @@ body {
   position: relative;
   border-style: solid;
   border-width: 3px;
-  border-image: url("/images/counter-border.png") 3 repeat;
   padding: 2px 6px;
   image-rendering: pixelated;
 }
@@ -103,7 +98,6 @@ body {
 .pixel-instruction-image {
   border-style: solid;
   border-width: 3px;
-  border-image: url("/images/instruction-border.png") 3 repeat;
   image-rendering: pixelated;
 }
 
@@ -120,7 +114,6 @@ body {
 .pixel-trophy {
   width: 64px;
   height: 64px;
-  background-image: url("/images/trophy.png");
   background-size: contain;
   background-repeat: no-repeat;
   margin: 0 auto;

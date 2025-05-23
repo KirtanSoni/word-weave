@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && npx shx cp -r dist ../reactbuild",
+    "build": "tsc -b && vite build && npx shx cp -r dist ../internal/frontend/reactbuild",
     "lint": "eslint .",
     "preview": "vite preview"
   },
