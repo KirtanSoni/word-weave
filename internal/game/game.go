@@ -117,6 +117,7 @@ func (g *Game) Getgamestate(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			//fix : http code
 			http.Error(w, "Next Challenge Not Available", http.StatusAccepted)
+			return
 		}
 
 	}

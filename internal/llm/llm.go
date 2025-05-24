@@ -14,7 +14,7 @@ func LLMSummaries(s int,ctx context.Context)[]string{
 	for i := range(s){
 		completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 			Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-				openai.UserMessage("Write a paragraph of a random fact about anything you can think of. paragraph should be of 100 words"),
+				openai.UserMessage("Generate a 100-word paragraph containing a fascinating, lesser-known fact from any field of knowledge. Write as if extracted from a random encyclopedia page - factual, informative, and engaging. Choose from diverse topics: science, history, geography, biology, physics, culture, technology, space, medicine, archaeology, linguistics, or any other field. Avoid repetitive topics. Each response should feel like discovering an unexpected gem of knowledge. Write in an encyclopedic tone with specific details, numbers, and concrete examples. The fact should be surprising or educational to most readers. Aim for exactly 100 words."),
 			}),
 			Seed:  openai.Int(1),
 			Model: openai.F(openai.ChatModelGPT4o),
