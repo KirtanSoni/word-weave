@@ -1,3 +1,6 @@
 internal/frontend/reactbuild/*
 bin/*
 logs/*
+words-weave/node_modules
+words-weave/dist
+words-weave/env
