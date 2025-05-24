@@ -8,7 +8,7 @@ import (
 
 var (
 	reactPath = "reactbuild"
-	//go:embed reactbuild
+	//go:embed  reactbuild
 	reactDist embed.FS
 	instance  *ReactSPA = &ReactSPA{
 		buildDir:   reactPath,
