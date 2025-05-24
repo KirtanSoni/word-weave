@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect, useCallback } from "react"
+import { useCallback, useRef } from "react"
 import { PixelButton } from "./pixel-ui/pixel-button"
 import { X } from "lucide-react"
 
@@ -12,18 +11,23 @@ interface KeyboardShortcutsModalProps {
 }
 
 const KeyboardShortcutsModal = ({ isOpen, onClose }: KeyboardShortcutsModalProps) => {
-  const [animationClass, setAnimationClass] = useState("")
+  const modalRef = useRef<HTMLDivElement>(null)
 
   const handleClose = useCallback(
     (e?: React.MouseEvent) => {
       if (e) {
         e.stopPropagation()
       }
-      setAnimationClass("modal-exit")
-
-      setTimeout(() => {
+      
+      if (modalRef.current) {
+        modalRef.current.classList.add('modal-exiting')
+        
+        setTimeout(() => {
+          onClose()
+        }, 300)
+      } else {
         onClose()
-      }, 300)
+      }
     },
     [onClose],
   )
@@ -32,21 +36,18 @@ const KeyboardShortcutsModal = ({ isOpen, onClose }: KeyboardShortcutsModalProps
     e.stopPropagation()
   }, [])
 
-  useEffect(() => {
-    if (isOpen) {
-      setAnimationClass("modal-enter")
-    }
-  }, [isOpen])
-
   if (!isOpen) return null
 
   return (
+    <>
+    
     <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 modal-backdrop"
       onClick={handleClose}
     >
       <div
-        className={`pixel-container bg-teal-dark p-6 max-w-md w-full ${animationClass}`}
+        ref={modalRef}
+        className="pixel-container bg-teal-dark p-6 max-w-md w-full modal-content"
         onClick={handleContentClick}
       >
         <div className="flex justify-between items-center mb-4">
@@ -104,6 +105,66 @@ const KeyboardShortcutsModal = ({ isOpen, onClose }: KeyboardShortcutsModalProps
         </div>
       </div>
     </div>
+
+    <style>{`
+      .modal-backdrop {
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      .modal-content {
+        animation: modalEnter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transform-origin: center;
+      }
+
+      .modal-exiting .modal-backdrop {
+        animation: fadeOut 0.3s ease-in forwards;
+      }
+
+      .modal-exiting .modal-content {
+        animation: modalExit 0.3s ease-in forwards;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+
+      @keyframes modalEnter {
+        from {
+          opacity: 0;
+          transform: scale(0.8) translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      @keyframes modalExit {
+        from {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: scale(0.9) translateY(10px);
+        }
+      }
+    `}</style>
+    </>
   )
 }
 

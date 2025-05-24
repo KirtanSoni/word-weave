@@ -44,7 +44,7 @@
       const [draggedBubbleIndex, setDraggedBubbleIndex] = useState<number | null>(null)
       const [touchInfo, setTouchInfo] = useState<TouchInfo | null>(null)
       const [isGameWon, setIsGameWon] = useState(false)
-      const [isGameOevr, setIsGameOver] = useState(false)
+      const [isGameOver, setIsGameOver] = useState(false)
       const [isDailyLimit, setIsDailyLimit] = useState(false)
       const [showInstructions, setShowInstructions] = useState(false)
       const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
@@ -410,7 +410,7 @@
 
           {isGameWon ? (
             <PixelWinScreen onNextChallenge={() => fetchGameData(true)} />
-          ) : isGameOevr ?  <GameOverScreen 
+          ) : isGameOver ?  <GameOverScreen 
               attempts={gameData.attempts} 
               onNextChallenge={() => {
                 setIsGameOver(false)
