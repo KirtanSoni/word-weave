@@ -59,7 +59,13 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 	}
 
 	if err := stream.Err(); err != nil {
-		log.Println(err)
+		log.Printf("Streaming error: %v", err)
+		return "" 
+	}
+
+	if len(acc.Choices) == 0 {
+		log.Printf("No choices returned from OpenAI API for input: %s", input)
+		return "" 	
 	}
 	close(output)
 	return acc.Choices[0].Message.Content
