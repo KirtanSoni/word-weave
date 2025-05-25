@@ -150,6 +150,7 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 	sessionID, err := g.SessionManager.GetSessionID(r)
 	if err != nil || sessionID == "" {
 		http.Error(w, "No Session Detected", http.StatusRequestTimeout)
+		return
 	}
 
 	s, exists := g.SessionManager.GetState(sessionID)
@@ -157,6 +158,7 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 	if !exists {
 		//should not happen
 		http.Error(w, "Session Invalid", http.StatusRequestTimeout)
+		return
 	}
 
 	if time.Since(s.LastAccessed) < LLM_TIMOUT {
@@ -197,7 +199,16 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 
 	chunks := make(chan string, 10)
 	var content string
+	var streamError error
+
+	// CRITICAL FIX: Handle goroutine panics and errors
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recovered from panic in StreamingLLM goroutine: %v", r)
+				streamError = fmt.Errorf("streaming failed due to panic: %v", r)
+			}
+		}()
 		content = l.StreamingLLM(req.Input, r.Context(), chunks)
 	}()
 
@@ -205,6 +216,12 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 		select {
 		case chunk, ok := <-chunks:
 			if !ok {
+				// Channel closed, streaming is done
+				if streamError != nil {
+					http.Error(w, "Streaming failed", http.StatusInternalServerError)
+					return
+				}
+				
 				// update session after streaming is over
 				err := s.UpdateSession(req.Input, content, g.GetChallengeWords(s.Challenge))
 				if err != nil {
@@ -218,15 +235,17 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 			} else {
 				flusher, ok := w.(http.Flusher)
 				if !ok {
-					// log error
-
 					http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 					return
 				}
-				//stream chuncks
+				//stream chunks
 				fmt.Fprint(w, chunk)
 				flusher.Flush()
 			}
+		case <-r.Context().Done():
+			// Client disconnected
+			log.Println("Client disconnected during streaming")
+			return
 		}
 	}
 }

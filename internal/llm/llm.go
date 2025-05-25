@@ -2,14 +2,14 @@ package llm
 
 import (
 	"context"
-
-	"github.com/openai/openai-go"
 	"log"
+	"github.com/openai/openai-go"
 )
 
 func LLMSummaries(s int, ctx context.Context) []string {
 	client := openai.NewClient()
 	contents := make([]string, s)
+
 	for i := range s {
 		completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 			Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
@@ -19,14 +19,33 @@ func LLMSummaries(s int, ctx context.Context) []string {
 			Model: openai.F(openai.ChatModelGPT4o),
 		})
 		if err != nil {
-			panic(err)
+			log.Printf("Error in LLMSummaries for index %d: %v", i, err)
+			contents[i] = "Unable to generate content at this time."
+			continue
 		}
+		
+		// CRITICAL FIX: Check if Choices exists before accessing
+		if len(completion.Choices) == 0 {
+			log.Printf("No choices returned from OpenAI API for LLMSummaries index %d", i)
+			contents[i] = "Content unavailable."
+			continue
+		}
+		
 		contents[i] = completion.Choices[0].Message.Content
 	}
+	
 	return contents
 }
 
 func StreamingLLM(input string, ctx context.Context, output chan string) string {
+	// CRITICAL: Always close the channel, even on panic
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic in StreamingLLM: %v", r)
+		}
+		close(output)
+	}()
+
 	client := openai.NewClient()
 	stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
@@ -36,7 +55,6 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 		Seed:      openai.Int(0),
 		Model:     openai.F(openai.ChatModelGPT3_5Turbo),
 		MaxTokens: openai.Int(150),
-		// Temperature: param.Field[float64]{},
 	})
 
 	acc := openai.ChatCompletionAccumulator{}
@@ -46,11 +64,11 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 		acc.AddChunk(chunk)
 
 		if _, ok := acc.JustFinishedContent(); ok {
-			// println("Content stream finished:", content)
+			// Content stream finished
 		}
 
 		if _, ok := acc.JustFinishedRefusal(); ok {
-			// println("Refusal stream finished:", refusal)
+			// Refusal stream finished
 		}
 
 		if len(chunk.Choices) > 0 {
@@ -60,13 +78,14 @@ func StreamingLLM(input string, ctx context.Context, output chan string) string 
 
 	if err := stream.Err(); err != nil {
 		log.Printf("Streaming error: %v", err)
-		return "" 
+		return ""
 	}
 
+	// CRITICAL FIX: Check if acc.Choices has any elements before accessing
 	if len(acc.Choices) == 0 {
 		log.Printf("No choices returned from OpenAI API for input: %s", input)
-		return "" 	
+		return ""
 	}
-	close(output)
+
 	return acc.Choices[0].Message.Content
 }
