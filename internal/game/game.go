@@ -6,11 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
-	db "github.com/kirtansoni/words-weave/internal/database"
+	// db "github.com/kirtansoni/words-weave/internal/database"
 	l "github.com/kirtansoni/words-weave/internal/llm"
 	m "github.com/kirtansoni/words-weave/internal/models"
 	s "github.com/kirtansoni/words-weave/internal/sessions"
@@ -34,24 +33,24 @@ func GetGame() *Game {
 	return game
 }
 
-func (g *Game) SetChallenges(challenges []m.Challenge){
+func (g *Game) SetChallenges(challenges []m.Challenge) {
 	g.SessionManager.Lock()
 	defer g.SessionManager.Unlock()
-	g.Challenges = challenges	
+	g.Challenges = challenges
 }
-func (g *Game) Init(ctx context.Context){
-	challenges := APIChallenges(MAXCHALLENGES,ctx)
+func (g *Game) Init(ctx context.Context) {
+	
+	challenges := m.GetChallenges() 
 	g.SetChallenges(challenges)
-	go g.CronJob(ctx)
+	// go g.CronJob(ctx)
 }
-
 
 func (g *Game) IsValidState(state *m.State) bool {
-	today := time.Now().Truncate(24 * time.Hour)
-	lastAccessed := state.LastAccessed.Truncate(24 * time.Hour)
-	if !lastAccessed.Equal(today) {
-		return false
-	}
+	// today := time.Now().Truncate(24 * time.Hour)
+	// lastAccessed := state.LastAccessed.Truncate(24 * time.Hour)
+	// if !lastAccessed.Equal(today) {
+	// 	return false
+	// }
 	return true
 }
 
@@ -67,7 +66,7 @@ func (g *Game) NewState(sessionid string, challenge int) *m.State {
 }
 
 func (g *Game) isComplete(state *m.State) bool {
-	if state.Attempts>=MAX_ATTEMPTS{
+	if state.Attempts >= MAX_ATTEMPTS {
 		return true
 	}
 	for i := range state.Progress {
@@ -110,7 +109,7 @@ func (g *Game) Getgamestate(w http.ResponseWriter, r *http.Request) {
 	queryParams := r.URL.Query()
 	next := queryParams.Get("next")
 	//get next state if eligible
-	if next != "" && exists && g.isComplete(state)  {
+	if next != "" && exists && g.isComplete(state) {
 
 		//could be error prone
 		err = g.setNextState(state)
@@ -230,7 +229,7 @@ func (g *Game) Postgamestate(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if g.isComplete(s) {
-					db.SaveState(s)
+					// db.SaveState(s)
 				}
 				return
 			} else {
@@ -258,72 +257,72 @@ func (g *Game) GetChallengeWords(index int) []string {
 	return g.Challenges[index].Words
 }
 
-func (g *Game) CronJob(ctx context.Context) {
-		
+// func (g *Game) CronJob(ctx context.Context) {
 
-		now := time.Now()
-		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
-		durationUntilMidnight := time.Until(nextMidnight)
-		time.Sleep(durationUntilMidnight)
-		g.MidNightUpdate(ctx)
-		// After running once, set up the ticker to run every 24 hours.
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-	
-		// Keep running the task every 24 hours.
-		for range ticker.C {
-			g.MidNightUpdate(ctx)
-		}
-	
-}
+// 	now := time.Now()
+// 	nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+// 	durationUntilMidnight := time.Until(nextMidnight)
+// 	time.Sleep(durationUntilMidnight)
+// 	g.MidNightUpdate(ctx)
+// 	// After running once, set up the ticker to run every 24 hours.
+// 	ticker := time.NewTicker(24 * time.Hour)
+// 	defer ticker.Stop()
 
-func (g *Game) MidNightUpdate(ctx context.Context) {
-	log.Println("Running scheduled task at midnight")
+// 	// Keep running the task every 24 hours.
+// 	for range ticker.C {
+// 		g.MidNightUpdate(ctx)
+// 	}
 
-	// g.SessionManager.SaveAllSessionsToDB()
-	// g.SessionManager.ClearAllSessions()
+// }
 
-	newChallenges := APIChallenges(MAXCHALLENGES, ctx) // Fetch new challenges
-	g.SetChallenges(newChallenges)
-}
+// func (g *Game) MidNightUpdate(ctx context.Context) {
+// 	log.Println("Running scheduled task at midnight")
 
-func APIChallenges(s int, ctx context.Context) []m.Challenge {
-	resp, err := http.Get("https://zenquotes.io/api/quotes")
-	if err != nil {
-		log.Println("unable to fetch qoutes from zenquotes")
-		return nil
-	}
-	defer resp.Body.Close()
+// 	// g.SessionManager.SaveAllSessionsToDB()
+// 	// g.SessionManager.ClearAllSessions()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil
-	}
-	type tempQuote struct {
-		Quote  string `json:"q"`
-		Author string `json:"a"`
-	}
-	var rawQuotes []tempQuote
+// 	newChallenges := APIChallenges(MAXCHALLENGES, ctx) // Fetch new challenges
+// 	g.SetChallenges(newChallenges)
+// }
 
-	// Parse JSON
-	if err := json.Unmarshal(body, &rawQuotes); err != nil {
-		return nil
-	}
+// func APIChallenges(s int, ctx context.Context) []m.Challenge {
+// 	resp, err := http.Get("https://zenquotes.io/api/quotes")
+// 	if err != nil {
+// 		log.Println("unable to fetch qoutes from zenquotes")
+// 		return nil
+// 	}
+// 	defer resp.Body.Close()
 
-	var res []m.Challenge = make([]m.Challenge, s)
+// 	body, err := io.ReadAll(resp.Body)
+// 	if err != nil {
+// 		return nil
+// 	}
+// 	type tempQuote struct {
+// 		Quote  string `json:"q"`
+// 		Author string `json:"a"`
+// 	}
+// 	var rawQuotes []tempQuote
+// 	fmt.Println(body)
+// 	// Parse JSON
+// 	if err := json.Unmarshal(body, &rawQuotes); err != nil {
+// 		log.Println(err)
+// 	}
+// 	fmt.Println("Number of rawQoutes:", len(rawQuotes))
 
-	summaries := l.LLMSummaries(s,ctx)
+// 	var res []m.Challenge = make([]m.Challenge, s)
 
-	for i := 0; i < len(res); i++ {
-		content := summaries[i]
-		fmt.Println(content)
-		words := m.SanitizeAndSplit(rawQuotes[i].Quote)
-		res[i] = m.Challenge{
-			Quote:   rawQuotes[i].Quote,
-			Author:  rawQuotes[i].Author,
-			Content: content,
-			Words:   words,
-		}
-	}
-	return res
-}
+// 	// summaries := l.LLMSummaries(s, ctx)
+// 	// fmt.Println("Number of summaries:", len(summaries))
+
+// 	for i := 0; i < len(res); i++ {
+// 		content := "The honeybee, an insect known for its role in pollination, has a highly organized social structure within the hive, which can house up to 60,000 bees. At its core is the queen, whose primary function is reproduction, laying up to 2,000 eggs per day. Worker bees, all female, engage in various roles based on age, from caring for larvae to foraging for nectar. Remarkably, the structure of a honeycomb is composed of perfect hexagons, a shape that allows for maximum efficiency in storing honey and larvae. Moreover, honeybees communicate through complex \"waggle dances,\" conveying information about the direction and distance of food sources to other hive members."
+// 		words := m.SanitizeAndSplit(rawQuotes[i].Quote)
+// 		res[i] = m.Challenge{
+// 			Quote:   rawQuotes[i].Quote,
+// 			Author:  rawQuotes[i].Author,
+// 			Content: content,
+// 			Words:   words,
+// 		}
+// 	}
+// 	return res
+// }

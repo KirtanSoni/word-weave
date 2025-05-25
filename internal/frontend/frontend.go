@@ -1,4 +1,4 @@
-package frontend 
+package frontend
 
 import (
 	"embed"
@@ -10,7 +10,7 @@ var (
 	reactPath = "reactbuild"
 	//go:embed  reactbuild
 	reactDist embed.FS
-	instance *ReactSPA = &ReactSPA{
+	instance  *ReactSPA = &ReactSPA{
 		buildDir:   reactPath,
 		embeddings: reactDist,
 	}

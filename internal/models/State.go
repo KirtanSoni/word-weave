@@ -4,40 +4,25 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
-	"unicode"
 )
 
 var (
 	INACTIVE_THRESHOLD = time.Minute * 10
 )
 
-// helper
-func SanitizeAndSplit(text string) []string {
-	text = strings.ToLower(text)
-	var clean strings.Builder
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsSpace(r) {
-			clean.WriteRune(r)
-		}
-	}
-	words := strings.Fields(clean.String())
-	return words
-}
-
 type Entry struct {
-	Input   string
-	Content string
+	Input   string `json:"input"`
+	Content string `json:"content"`
 }
 
 type State struct {
-	ID           string
-	Challenge    int
-	Progress     []bool
-	Content      []Entry
-	Attempts     int
-	LastAccessed time.Time
+	ID           string    `json:"id"`
+	Challenge    int       `json:"challenge"`
+	Progress     []bool    `json:"progress"`
+	Content      []Entry   `json:"content"`
+	Attempts     int       `json:"attempts"`
+	LastAccessed time.Time `json:"lastaccessed"`
 }
 
 func (s *State) addContent(content Entry) {
@@ -46,14 +31,14 @@ func (s *State) addContent(content Entry) {
 	}
 	s.Content = append(s.Content, content)
 	s.Attempts++
-	return 
+	return
 }
 
 func (s *State) IsActive() bool {
 	return time.Since(s.LastAccessed) < INACTIVE_THRESHOLD
 }
 
-//Not Used Yet
+// Not Used Yet
 func (s *State) Validate(Input string) bool {
 	freq := make(map[string]int)
 	content := SanitizeAndSplit(s.Content[len(s.Content)-1].Content)
@@ -69,7 +54,6 @@ func (s *State) Validate(Input string) bool {
 	return true
 }
 
-
 func (s *State) UpdateSession(input string, content string, challengewords []string) error {
 	entry := Entry{Input: input, Content: content}
 	s.addContent(entry)
@@ -77,7 +61,7 @@ func (s *State) UpdateSession(input string, content string, challengewords []str
 	if err != nil {
 		return err
 	}
- 	return nil
+	return nil
 }
 
 func (s *State) findCommonWords(content string, challengewords []string) error {
@@ -99,10 +83,10 @@ func (s *State) findCommonWords(content string, challengewords []string) error {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	// Parse the response
-	var stemResp struct{
-		MatchedIndices    [][]int  `json:"matched_indices"`
+	var stemResp struct {
+		MatchedIndices [][]int `json:"matched_indices"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&stemResp); err != nil {
@@ -117,32 +101,6 @@ func (s *State) findCommonWords(content string, challengewords []string) error {
 	return nil
 }
 
-type RequestStruct struct {
-	Input string `json:"input"`
-}
-
-// get Request response
-type ResponseStruct struct {
-	Challenge int    `json:"challenge"`
-	Quote     string `json:"quote"`
-	Author    string `json:"author"`
-	Content   string `json:"content"`
-	Attempts  int    `json:"attempts"`
-	Progress  []bool `json:"progress"`
-}
-
-func (s *State) GetPayload() ResponseStruct {
-	res := ResponseStruct{
-		Challenge: s.Challenge,
-		Progress:  s.Progress,
-		Attempts:  s.Attempts,
-	}
-	if len(s.Content) != 0 {
-		res.Content = s.Content[len(s.Content)-1].Content
-	}
-	return res
-}
-
 type Challenge struct {
 	Quote   string
 	Author  string
@@ -150,41 +108,27 @@ type Challenge struct {
 	Words   []string
 }
 
-func GetChallenges(num int) ([]Challenge, error) {
-	quote1:=  "When you reach the end of your rope, tie a knot in it and hang on."
-	quote2:=  "Always remember that you are absolutely unique. Just like everyone else."
-	quote3:=  "Don't judge each day by the harvest you reap but by the seeds that you plant."
-	quote4:=  "The future belongs to those who believe in the beauty of their dreams."
-	challenges := []Challenge{
-		{
-			Quote:  quote1,
-			Author:  "Franklin D. Roosevelt",
-			Content: "Memory allocation in Go is handled automatically by the runtime.",
-			Words:   SanitizeAndSplit(quote1),
-		},
-		{
-			Quote:   quote2,
-			Author:  "Margaret Mead",
-			Content: "Error handling is an essential part of robust programming.",
-			Words:  SanitizeAndSplit(quote2),
-		},
-		{
-			Quote:   "Don't judge each day by the harvest you reap but by the seeds that you plant.",
-			Author:  "Robert Louis Stevenson",
-			Content: "Testing ensures your code works as expected under various conditions.",
-			Words:    SanitizeAndSplit(quote3),
-		},
-		{
-			Quote:   "The future belongs to those who believe in the beauty of their dreams.",
-			Author:  "Eleanor Roosevelt",
-			Content: "Documentation helps others understand your code and its purpose.",
-			Words:   SanitizeAndSplit(quote4),
-		},
+func GetChallenges() []Challenge {
+	quotes := []struct {
+		quote, author, content string
+	}{
+		{"When you reach the end of your rope, tie a knot in it and hang on.", "Franklin D. Roosevelt", "Persistence and resilience are key to overcoming obstacles. Success often comes to those who refuse to give up, learning from failures and adapting to new challenges. Each setback is an opportunity to grow stronger and wiser."},
+		{"Always remember that you are absolutely unique. Just like everyone else.", "Margaret Mead", "Individuality defines us, yet we share common traits that bind humanity together. Embracing our uniqueness while understanding others fosters both personal growth and stronger communities."},
+		{"Don't judge each day by the harvest you reap but by the seeds that you plant.", "Robert Louis Stevenson", "Progress is often measured by the effort we invest rather than immediate outcomes. Small, consistent actions lead to significant achievements over time, reinforcing the value of patience and dedication."},
+		{"The future belongs to those who believe in the beauty of their dreams.", "Eleanor Roosevelt", "Visionaries shape the world by daring to dream big. Their belief fuels innovation and perseverance, transforming ideas into reality. Confidence in one’s aspirations is the first step toward success."},
+		{"It is during our darkest moments that we must focus to see the light.", "Aristotle", "Challenges test our resolve, but hope and determination guide us forward. Strength emerges from adversity, and maintaining a positive outlook is crucial to navigating life’s uncertainties."},
 	}
 
-	// Return all challenges or limit to num
-	if num <= 0 || num >= len(challenges) {
-		return nil,nil
+	var challenges []Challenge
+	for _, q := range quotes {
+		challenges = append(challenges, Challenge{
+			Quote:   q.quote,
+			Author:  q.author,
+			Content: q.content,
+			Words:   SanitizeAndSplit(q.quote),
+		})
 	}
-	return challenges[:num], nil
+
+	return challenges
 }
+

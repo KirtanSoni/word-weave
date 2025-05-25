@@ -1,6 +1,5 @@
 
 # TODO:
-- [ ] Fetch challenges from a database/some-mechanism 
 - [ ] CronJob to refresh challenges at midnight
 - [ ] Database Implimentation (save state)
 
