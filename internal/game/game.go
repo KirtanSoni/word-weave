@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"log"
 
 	// db "github.com/kirtansoni/words-weave/internal/database"
 	l "github.com/kirtansoni/words-weave/internal/llm"
